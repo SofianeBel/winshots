@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="UIAutomationClient">
+      <HintPath>C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\UIAutomationClient.dll</HintPath>
+    </Reference>
+    <Reference Include="UIAutomationTypes">
+      <HintPath>C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\UIAutomationTypes.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>
