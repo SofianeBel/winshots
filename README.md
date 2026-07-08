@@ -39,6 +39,28 @@ If Codex App is not already running, Windows refuses to focus it, or Winshots ca
 dotnet run --project .\src\Winshots.App\Winshots.App.csproj
 ```
 
+## Electron UI
+
+```powershell
+npm install
+npm run ui:electron
+```
+
+The Electron UI reads the same local capture root as the C# app by default:
+
+```text
+%USERPROFILE%\Documents\Winshots\captures
+```
+
+Override it for testing with `WINSHOTS_CAPTURE_ROOT`.
+
+Smoke-check without opening the full app window:
+
+```powershell
+npm run ui:smoke
+npm run ui:screenshot
+```
+
 ## Smoke Capture
 
 ```powershell

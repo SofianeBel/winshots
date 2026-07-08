@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; img-src 'self' file: data:; style-src 'self'; script-src 'self';" />
+    <title>Winshots</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="titlebar">
+        <div class="titlebar-left">
+          <span class="app-mark" aria-hidden="true"></span>
+          <strong>Winshots</strong>
+        </div>
+        <div class="window-controls" aria-label="Window controls">
+          <button type="button" class="window-button" data-window-action="minimize" aria-label="Minimize">
+            <span></span>
+          </button>
+          <button type="button" class="window-button" data-window-action="maximize" aria-label="Maximize">
+            <span></span>
+          </button>
+          <button type="button" class="window-button close" data-window-action="close" aria-label="Close">
+            <span></span>
+          </button>
+        </div>
+      </header>
+
+      <nav class="menubar" aria-label="Application menu">
+        <button type="button">File</button>
+        <button type="button">Edit</button>
+        <button type="button">View</button>
+        <button type="button">Tools</button>
+        <button type="button">Help</button>
+      </nav>
+
+      <div class="workspace">
+        <aside class="sidebar" aria-label="Winshots navigation">
+          <section class="brand-row">
+            <button class="icon-button" type="button" aria-label="Toggle sidebar" data-icon="menu"></button>
+            <strong>Winshots</strong>
+          </section>
+
+          <section class="nav-section" aria-label="Primary sections">
+            <button class="nav-item active" type="button" data-filter="all">
+              <span class="nav-icon" data-icon="capture"></span>
+              <span>Captures</span>
+            </button>
+            <button class="nav-item" type="button" data-filter="codex">
+              <span class="nav-icon" data-icon="codex"></span>
+              <span>Codex-ready</span>
+            </button>
+            <button class="nav-item" type="button" data-filter="context">
+              <span class="nav-icon" data-icon="context"></span>
+              <span>With context</span>
+            </button>
+            <button class="nav-item" type="button" data-filter="images">
+              <span class="nav-icon" data-icon="image"></span>
+              <span>Images</span>
+            </button>
+          </section>
+
+          <section class="sidebar-group">
+            <div class="sidebar-heading">
+              <span>Projects</span>
+              <button type="button" class="plain-button" aria-label="Add project">+</button>
+            </div>
+            <div id="project-list" class="project-list"></div>
+          </section>
+
+          <section class="sidebar-group recent-group">
+            <div class="sidebar-heading">
+              <span>Recent</span>
+            </div>
+            <div id="recent-list" class="recent-list"></div>
+          </section>
+
+          <section class="sidebar-footer">
+            <div class="footer-tools">
+              <button class="icon-button" type="button" aria-label="Settings" data-icon="settings"></button>
+              <button class="icon-button" type="button" aria-label="Theme" data-icon="theme"></button>
+            </div>
+            <p><span class="status-dot"></span><span id="sync-status">Loading captures...</span></p>
+          </section>
+        </aside>
+
+        <main class="content">
+          <section class="content-head">
+            <div>
+              <div class="capture-title">
+                <h1 id="capture-set-title">Winshots captures</h1>
+                <button type="button" class="icon-button small" aria-label="Rename capture set" data-icon="edit"></button>
+              </div>
+              <div class="metrics-row" id="summary-metrics"></div>
+            </div>
+            <div class="view-tools">
+              <button type="button" class="segmented active" aria-label="List view" data-icon="list"></button>
+              <button type="button" class="segmented" aria-label="Grid view" data-icon="grid"></button>
+              <select aria-label="Select captures">
+                <option>Select</option>
+                <option>All visible</option>
+                <option>Codex-ready</option>
+                <option>With context</option>
+              </select>
+            </div>
+          </section>
+
+          <section class="table-panel" aria-label="Capture list">
+            <div class="capture-table" role="table" aria-label="Local captures">
+              <div class="capture-row table-head" role="row">
+                <span role="columnheader">#</span>
+                <span role="columnheader">Preview</span>
+                <span role="columnheader">Title</span>
+                <span role="columnheader">Time</span>
+                <span role="columnheader">Duration</span>
+                <span role="columnheader">Labels</span>
+                <span role="columnheader"></span>
+              </div>
+              <div id="capture-rows" class="capture-rows"></div>
+            </div>
+            <div class="table-status">
+              <span id="capture-count">0 captures</span>
+              <label class="checkbox-label">
+                <span>Auto-scroll</span>
+                <input type="checkbox" checked />
+              </label>
+            </div>
+          </section>
+        </main>
+
+        <aside class="inspector" aria-label="Capture inspector">
+          <header class="inspector-head">
+            <h2>Inspector</h2>
+            <button type="button" class="icon-button small" aria-label="Inspector settings" data-icon="tune"></button>
+          </header>
+
+          <section class="inspector-body" id="inspector-body"></section>
+        </aside>
+      </div>
+    </div>
+
+    <script src="./renderer.js"></script>
+  </body>
+</html>

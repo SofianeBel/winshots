@@ -1,0 +1,15 @@
+{
+  "name": "winshots",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local Windows capture app with an Electron review UI.",
+  "main": "src/Winshots.Electron/main.cjs",
+  "scripts": {
+    "ui:electron": "electron .",
+    "ui:smoke": "electron . --smoke",
+    "ui:screenshot": "electron . --screenshot artifacts/electron-ui.png"
+  },
+  "devDependencies": {
+    "electron": "^43.1.0"
+  }
+}
