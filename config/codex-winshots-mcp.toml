@@ -1,7 +1,8 @@
-# Add this block to C:\Users\sifly\.codex\config.toml, then start a new Codex thread.
+# Add this block to %USERPROFILE%\.codex\config.toml, then start a new Codex thread.
+# Replace <REPO_ROOT> with this repository's absolute path using forward slashes.
 
 [mcp_servers.winshots]
 command = "dotnet"
-args = ["C:/Users/sifly/Documents/Winshots/src/Winshots.Mcp/bin/Debug/net8.0-windows/Winshots.Mcp.dll"]
+args = ["<REPO_ROOT>/src/Winshots.Mcp/bin/Debug/net8.0-windows/Winshots.Mcp.dll"]
 type = "stdio"
 startup_timeout_sec = 20.0

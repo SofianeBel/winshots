@@ -2,6 +2,7 @@
   "name": "winshots",
   "version": "0.1.0",
   "private": true,
+  "license": "UNLICENSED",
   "description": "Local Windows capture app with an Electron review UI.",
   "main": "src/Winshots.Electron/main.cjs",
   "scripts": {

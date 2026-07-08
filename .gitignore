@@ -2,8 +2,11 @@ bin/
 obj/
 .vs/
 node_modules/
+.codex/
+.autopilot/
 *.user
 TestResults/
 artifacts/
 captures/
+sessions/
 *.log

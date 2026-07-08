@@ -65,3 +65,12 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
+## Winshots Project Notes
+
+- This is a Windows-only .NET 8 WinForms capture app with a local Electron review UI and a stdio MCP server.
+- Keep public docs aligned with the local-first privacy model: screenshots, text context, captures, and sessions stay on disk unless the user explicitly attaches or shares them.
+- Do not publish generated state: `bin/`, `obj/`, `node_modules/`, `artifacts/`, `captures/`, `sessions/`, `.codex/`, and `.autopilot/` are local-only.
+- For general validation, run `dotnet build .\Winshots.slnx` and `dotnet test .\Winshots.slnx --no-build`.
+- When touching the Electron UI, also run `npm run ui:smoke` after dependencies are installed.
+- When touching MCP tools or Codex integration, run `.\scripts\smoke-mcp.ps1`; use `.\scripts\smoke-mcp.ps1 -Capture` or `-Session` for capture/session coverage.
