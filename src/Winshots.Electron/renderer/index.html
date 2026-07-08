@@ -83,9 +83,33 @@
               </div>
               <div class="metrics-row" id="summary-metrics"></div>
             </div>
-            <div class="view-tools">
-              <button type="button" class="segmented active" aria-label="List view" aria-pressed="true" data-view-mode="list" data-icon="list"></button>
-              <button type="button" class="segmented" aria-label="Grid view" aria-pressed="false" data-view-mode="grid" data-icon="grid"></button>
+            <div class="head-actions">
+              <div class="command-tools" aria-label="Winshots commands">
+                <button type="button" class="command-button primary" data-command="capture">
+                  <span data-icon="capture"></span>
+                  <span>Capture</span>
+                </button>
+                <button type="button" class="command-button" data-command="capture-codex">
+                  <span data-icon="codex"></span>
+                  <span>To Codex</span>
+                </button>
+                <button type="button" class="command-button" data-command="timeline" aria-pressed="false">
+                  <span data-icon="timeline"></span>
+                  <span>Timeline</span>
+                </button>
+                <button type="button" class="command-button" data-command="session" aria-pressed="false">
+                  <span data-icon="session"></span>
+                  <span>Session</span>
+                </button>
+                <label class="interval-control" aria-label="Capture interval in seconds">
+                  <input type="number" min="5" max="3600" step="1" value="60" data-interval-seconds />
+                  <span>s</span>
+                </label>
+              </div>
+              <div class="view-tools">
+                <button type="button" class="segmented active" aria-label="List view" aria-pressed="true" data-view-mode="list" data-icon="list"></button>
+                <button type="button" class="segmented" aria-label="Grid view" aria-pressed="false" data-view-mode="grid" data-icon="grid"></button>
+              </div>
             </div>
           </section>
 

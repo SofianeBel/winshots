@@ -95,6 +95,8 @@ svg {
 .brand-row,
 .capture-title,
 .metrics-row,
+.head-actions,
+.command-tools,
 .view-tools,
 .footer-tools,
 .tag-row {
@@ -410,17 +412,25 @@ button[aria-disabled="true"]:hover {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: 90px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   background:
     linear-gradient(90deg, rgba(255, 255, 255, 0.035), transparent 24%, transparent 76%, rgba(255, 255, 255, 0.02)),
     #111316;
 }
 
 .content-head {
+  min-height: 90px;
   display: flex;
   justify-content: space-between;
   gap: 24px;
   padding: 18px 24px 12px;
+}
+
+.head-actions {
+  align-self: flex-start;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .capture-title {
@@ -468,6 +478,64 @@ h1 {
 .view-tools {
   align-self: flex-start;
   gap: 10px;
+}
+
+.command-tools {
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.command-button {
+  min-width: 88px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #1b1e24;
+  color: #e5e9ef;
+  padding: 0 10px;
+}
+
+.command-button.primary {
+  border-color: rgba(93, 168, 255, 0.62);
+  background: rgba(93, 168, 255, 0.16);
+  color: #f4f8ff;
+}
+
+.command-button:hover {
+  background: #242a33;
+}
+
+.command-button.active {
+  border-color: rgba(103, 212, 134, 0.72);
+  background: rgba(103, 212, 134, 0.12);
+  color: #ecfff1;
+}
+
+.interval-control {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #15181d;
+  color: var(--muted);
+  padding: 0 8px;
+}
+
+.interval-control input {
+  width: 46px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  text-align: right;
+  font: inherit;
 }
 
 .segmented {

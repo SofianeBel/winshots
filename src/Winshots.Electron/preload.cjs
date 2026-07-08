@@ -2,6 +2,9 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("winshots", {
   listCaptures: () => ipcRenderer.invoke("captures:list"),
+  captureNow: (options) => ipcRenderer.invoke("app:capture", options),
+  startVisualSession: (options) => ipcRenderer.invoke("sessions:start", options),
+  stopVisualSession: () => ipcRenderer.invoke("sessions:stop"),
   readCaptureContext: (captureId) => ipcRenderer.invoke("captures:context", captureId),
   openCaptureFolder: (captureId) => ipcRenderer.invoke("captures:open-folder", captureId),
   copyScreenshotPath: (captureId) => ipcRenderer.invoke("captures:copy-path", captureId),

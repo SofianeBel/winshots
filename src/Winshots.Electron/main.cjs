@@ -1,4 +1,5 @@
 const crypto = require("node:crypto");
+const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
@@ -14,6 +15,7 @@ let smokeTimer;
 let automationFinished = false;
 let screenshotInProgress = false;
 let screenshotAttempts = 0;
+let activeSession = null;
 
 function readArgValue(name) {
   const inline = process.argv.find((arg) => arg.startsWith(`${name}=`));
@@ -41,6 +43,247 @@ function resolveCaptureRoot() {
   }
 
   return path.join(app.getPath("documents"), "Winshots", "captures");
+}
+
+function resolveSessionRoot() {
+  if (process.env.WINSHOTS_SESSION_ROOT) {
+    return path.resolve(process.env.WINSHOTS_SESSION_ROOT);
+  }
+
+  return path.join(app.getPath("documents"), "Winshots", "sessions");
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function resolveAppCommand() {
+  if (process.env.WINSHOTS_APP_PATH) {
+    return {
+      file: path.resolve(process.env.WINSHOTS_APP_PATH),
+      prefix: [],
+      cwd: path.dirname(path.resolve(process.env.WINSHOTS_APP_PATH))
+    };
+  }
+
+  const packagedExe = path.resolve(__dirname, "..", "app", "Winshots.App.exe");
+  if (fs.existsSync(packagedExe)) {
+    return { file: packagedExe, prefix: [], cwd: path.dirname(packagedExe) };
+  }
+
+  const builtExeCandidates = [
+    path.resolve(__dirname, "..", "Winshots.App", "bin", "Release", "net8.0-windows", "Winshots.App.exe"),
+    path.resolve(__dirname, "..", "Winshots.App", "bin", "Debug", "net8.0-windows", "Winshots.App.exe")
+  ];
+  const builtExe = builtExeCandidates.find((candidate) => fs.existsSync(candidate));
+  if (builtExe) {
+    return { file: builtExe, prefix: [], cwd: path.dirname(builtExe) };
+  }
+
+  const projectPath = path.resolve(__dirname, "..", "Winshots.App", "Winshots.App.csproj");
+  if (fs.existsSync(projectPath)) {
+    return {
+      file: "dotnet",
+      prefix: ["run", "--project", projectPath, "--"],
+      cwd: path.resolve(__dirname, "..", "..")
+    };
+  }
+
+  throw new Error("Winshots C# app command was not found.");
+}
+
+function runAppCommand(commandArgs, options = {}) {
+  const command = resolveAppCommand();
+  const child = spawn(command.file, [...command.prefix, ...commandArgs], {
+    cwd: command.cwd,
+    env: process.env,
+    windowsHide: true
+  });
+
+  return collectChildResult(child, options.timeoutMs || 30_000);
+}
+
+function collectChildResult(child, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      child.kill();
+      reject(new Error("Winshots app command timed out."));
+    }, timeoutMs);
+
+    child.stdout?.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr?.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", (error) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on("close", (code) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      clearTimeout(timer);
+      if (code === 0) {
+        resolve({ stdout: stdout.trim(), stderr: stderr.trim() });
+        return;
+      }
+
+      reject(new Error((stderr || stdout || `Winshots app command failed with exit code ${code}.`).trim()));
+    });
+  });
+}
+
+function parseLastJsonLine(output) {
+  const lines = String(output || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (let index = lines.length - 1; index >= 0; index--) {
+    try {
+      return JSON.parse(lines[index]);
+    } catch {
+      // Non-JSON output can come from dotnet build/run noise.
+    }
+  }
+
+  return null;
+}
+
+async function runCaptureCommand(options = {}) {
+  const pasteToCodex = Boolean(options.pasteToCodex);
+  const reason = options.reason || (pasteToCodex ? "electron-codex" : "electron");
+  const delayMs = Number.isFinite(Number(options.delayMs)) ? Math.max(0, Number(options.delayMs)) : 350;
+
+  if (mainWindow) {
+    mainWindow.minimize();
+    await delay(180);
+  }
+
+  const command = pasteToCodex ? "capture-to-codex" : "capture-once";
+  const result = await runAppCommand(
+    [
+      command,
+      "--output",
+      resolveCaptureRoot(),
+      "--delay-ms",
+      String(delayMs),
+      "--reason",
+      reason,
+      "--exclude-process-id",
+      String(process.pid),
+      "--json"
+    ],
+    { timeoutMs: pasteToCodex ? 45_000 : 20_000 }
+  );
+
+  return {
+    command: parseLastJsonLine(result.stdout),
+    stderr: result.stderr,
+    ...listCaptures()
+  };
+}
+
+function createSessionStopFilePath() {
+  return path.join(app.getPath("temp"), `winshots-electron-session-${Date.now()}-${process.pid}.stop`);
+}
+
+async function startVisualSession(options = {}) {
+  if (activeSession) {
+    throw new Error("A Winshots visual session is already running.");
+  }
+
+  const intervalMs = Math.max(1000, Number(options.intervalMs || 1000));
+  const durationSeconds = Math.max(1, Number(options.durationSeconds || 300));
+  const stopFile = createSessionStopFilePath();
+  try {
+    fs.rmSync(stopFile, { force: true });
+  } catch {
+    // The stop file is best-effort state under the OS temp directory.
+  }
+
+  if (mainWindow) {
+    mainWindow.minimize();
+    await delay(180);
+  }
+
+  const command = resolveAppCommand();
+  const args = [
+    ...command.prefix,
+    "record-session",
+    "--output",
+    resolveSessionRoot(),
+    "--interval-ms",
+    String(intervalMs),
+    "--duration-seconds",
+    String(durationSeconds),
+    "--stop-file",
+    stopFile,
+    "--exclude-process-id",
+    String(process.pid),
+    "--json"
+  ];
+  const child = spawn(command.file, args, {
+    cwd: command.cwd,
+    env: process.env,
+    windowsHide: true
+  });
+
+  activeSession = {
+    child,
+    stopFile,
+    finished: collectChildResult(child, (durationSeconds + 45) * 1000)
+  };
+
+  activeSession.finished
+    .catch(() => {})
+    .finally(() => {
+      activeSession = null;
+      try {
+        fs.rmSync(stopFile, { force: true });
+      } catch {
+        // Nothing to clean up.
+      }
+    });
+
+  return {
+    running: true,
+    processId: child.pid || null,
+    stopFile,
+    sessionRoot: resolveSessionRoot()
+  };
+}
+
+async function stopVisualSession() {
+  if (!activeSession) {
+    return { running: false, manifest: null };
+  }
+
+  const session = activeSession;
+  fs.writeFileSync(session.stopFile, "stop", "utf8");
+  const result = await session.finished;
+  return {
+    running: false,
+    manifest: parseLastJsonLine(result.stdout),
+    stderr: result.stderr
+  };
 }
 
 function isUnderRoot(root, targetPath) {
@@ -313,6 +556,12 @@ async function prepareScreenshotMode() {
 }
 
 ipcMain.handle("captures:list", () => listCaptures());
+
+ipcMain.handle("app:capture", (_event, options) => runCaptureCommand(options));
+
+ipcMain.handle("sessions:start", (_event, options) => startVisualSession(options));
+
+ipcMain.handle("sessions:stop", () => stopVisualSession());
 
 ipcMain.handle("captures:context", (_event, captureId) => {
   const { root, capture } = findCapture(captureId);

@@ -1,4 +1,5 @@
 using Winshots.App.Capture;
+using Winshots.App.Codex;
 using Winshots.App.UI;
 using Winshots.App.Windows;
 
@@ -9,9 +10,9 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
-        if (args.Length > 0 && string.Equals(args[0], "capture-once", StringComparison.OrdinalIgnoreCase))
+        if (args.Length > 0 && IsCaptureCommand(args[0]))
         {
-            Environment.ExitCode = RunCaptureOnce(args[1..]);
+            Environment.ExitCode = RunCaptureOnce(args[0], args[1..]);
             return;
         }
 
@@ -25,12 +26,24 @@ internal static class Program
         Application.Run(new MainForm());
     }
 
-    private static int RunCaptureOnce(string[] args)
+    private static bool IsCaptureCommand(string command)
+    {
+        return string.Equals(command, "capture-once", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(command, "capture-to-codex", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int RunCaptureOnce(string command, string[] args)
     {
         try
         {
             string outputRoot = CapturePaths.DefaultRoot;
             int delayMs = 0;
+            string reason = string.Equals(command, "capture-to-codex", StringComparison.OrdinalIgnoreCase)
+                ? "electron-codex"
+                : "electron";
+            bool pasteToCodex = string.Equals(command, "capture-to-codex", StringComparison.OrdinalIgnoreCase);
+            bool json = false;
+            var excludedProcessIds = new HashSet<int>();
 
             for (int i = 0; i < args.Length; i++)
             {
@@ -42,6 +55,18 @@ internal static class Program
                 {
                     delayMs = int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture);
                 }
+                else if (string.Equals(args[i], "--reason", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+                {
+                    reason = args[++i];
+                }
+                else if (string.Equals(args[i], "--exclude-process-id", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+                {
+                    excludedProcessIds.Add(int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture));
+                }
+                else if (string.Equals(args[i], "--json", StringComparison.OrdinalIgnoreCase))
+                {
+                    json = true;
+                }
             }
 
             if (delayMs > 0)
@@ -49,15 +74,38 @@ internal static class Program
                 Thread.Sleep(delayMs);
             }
 
-            IntPtr hwnd = NativeMethods.GetForegroundWindow();
+            IntPtr hwnd = SelectCliCaptureTarget(excludedProcessIds);
             if (!NativeMethods.IsUsableCaptureTarget(hwnd))
             {
                 throw new InvalidOperationException("No usable foreground window is available to capture.");
             }
 
             var workflow = new CaptureWorkflow(outputRoot);
-            CaptureResult result = workflow.CaptureWindow(hwnd, "cli");
-            Console.WriteLine(result.DirectoryPath);
+            CaptureResult result = workflow.CaptureWindow(hwnd, reason);
+            CodexPasteResult? paste = pasteToCodex ? CodexChatPaster.TryPasteCapture(result) : null;
+
+            if (json)
+            {
+                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    result.Metadata.Id,
+                    result.DirectoryPath,
+                    result.ScreenshotPath,
+                    result.TextPath,
+                    result.MetadataPath,
+                    CodexPasteSuccess = paste?.Success,
+                    CodexPasteMessage = paste?.Message
+                }));
+            }
+            else
+            {
+                Console.WriteLine(result.DirectoryPath);
+                if (paste is not null)
+                {
+                    Console.WriteLine(paste.Message);
+                }
+            }
+
             return 0;
         }
         catch (Exception ex)
@@ -76,6 +124,9 @@ internal static class Program
             int durationSeconds = 5;
             int intervalMs = 1000;
             bool includeVideo = true;
+            bool json = false;
+            string? stopFile = null;
+            var excludedProcessIds = new HashSet<int>();
 
             for (int i = 0; i < args.Length; i++)
             {
@@ -99,6 +150,18 @@ internal static class Program
                 {
                     includeVideo = false;
                 }
+                else if (string.Equals(args[i], "--stop-file", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+                {
+                    stopFile = args[++i];
+                }
+                else if (string.Equals(args[i], "--exclude-process-id", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+                {
+                    excludedProcessIds.Add(int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture));
+                }
+                else if (string.Equals(args[i], "--json", StringComparison.OrdinalIgnoreCase))
+                {
+                    json = true;
+                }
             }
 
             if (delayMs > 0)
@@ -114,17 +177,32 @@ internal static class Program
                 IncludeVideo = includeVideo
             });
 
-            recorder.Start(NativeMethods.GetForegroundWindow);
-            VisualSessionManifest manifest = await recorder.WaitForCompletionAsync().ConfigureAwait(false);
-
-            Console.WriteLine(manifest.DirectoryPath);
-            if (!string.IsNullOrWhiteSpace(manifest.VideoPath))
+            recorder.Start(() => SelectCliCaptureTarget(excludedProcessIds));
+            VisualSessionManifest manifest;
+            if (string.IsNullOrWhiteSpace(stopFile))
             {
-                Console.WriteLine(manifest.VideoPath);
+                manifest = await recorder.WaitForCompletionAsync().ConfigureAwait(false);
             }
-            else if (!string.IsNullOrWhiteSpace(manifest.VideoError))
+            else
             {
-                Console.Error.WriteLine(manifest.VideoError);
+                manifest = await WaitForStopFileAsync(recorder, stopFile).ConfigureAwait(false);
+            }
+
+            if (json)
+            {
+                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(manifest));
+            }
+            else
+            {
+                Console.WriteLine(manifest.DirectoryPath);
+                if (!string.IsNullOrWhiteSpace(manifest.VideoPath))
+                {
+                    Console.WriteLine(manifest.VideoPath);
+                }
+                else if (!string.IsNullOrWhiteSpace(manifest.VideoError))
+                {
+                    Console.Error.WriteLine(manifest.VideoError);
+                }
             }
 
             return manifest.CapturedFrameCount > 0 ? 0 : 1;
@@ -134,5 +212,37 @@ internal static class Program
             Console.Error.WriteLine(ex.Message);
             return 1;
         }
+    }
+
+    private static IntPtr SelectCliCaptureTarget(HashSet<int> excludedProcessIds)
+    {
+        IntPtr foreground = NativeMethods.GetForegroundWindow();
+        if (NativeMethods.IsUsableCaptureTarget(foreground) &&
+            !excludedProcessIds.Contains(NativeMethods.GetProcessId(foreground)))
+        {
+            return foreground;
+        }
+
+        return NativeMethods
+            .EnumerateTopLevelWindows()
+            .FirstOrDefault(hwnd =>
+                NativeMethods.IsUsableCaptureTarget(hwnd) &&
+                !excludedProcessIds.Contains(NativeMethods.GetProcessId(hwnd)));
+    }
+
+    private static async Task<VisualSessionManifest> WaitForStopFileAsync(VisualSessionRecorder recorder, string stopFile)
+    {
+        string fullStopFile = Path.GetFullPath(stopFile);
+        while (recorder.IsRunning)
+        {
+            if (File.Exists(fullStopFile))
+            {
+                return await recorder.StopAsync().ConfigureAwait(false);
+            }
+
+            await Task.Delay(250).ConfigureAwait(false);
+        }
+
+        return await recorder.WaitForCompletionAsync().ConfigureAwait(false);
     }
 }

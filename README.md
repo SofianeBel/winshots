@@ -92,13 +92,13 @@ npm install
 npm run ui:electron
 ```
 
-The Electron UI reads the same local capture root as the C# app by default:
+The Electron UI calls the local C# app for capture, Capture to Codex, timeline, and visual session commands. It also reads the same local capture root as the C# app by default:
 
 ```text
 %USERPROFILE%\Documents\Winshots\captures
 ```
 
-Override it for testing with `WINSHOTS_CAPTURE_ROOT`.
+Override it for testing with `WINSHOTS_CAPTURE_ROOT`. Override the C# app command with `WINSHOTS_APP_PATH` when testing against a specific built executable.
 
 Smoke-check without opening the full app window:
 

@@ -10,6 +10,8 @@ const iconPaths = {
   folder: '<path d="M3 6h6l2 2h10v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6Z"/>',
   copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
   trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 16h10l1-16"/>',
+  timeline: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  session: '<rect x="3" y="6" width="14" height="12" rx="2"/><path d="m17 10 4-2v8l-4-2"/>',
   close: '<path d="M18 6 6 18M6 6l12 12"/>'
 };
 
@@ -23,7 +25,10 @@ const state = {
   autoScroll: true,
   previewId: null,
   root: "",
-  source: ""
+  source: "",
+  captureBusy: false,
+  timelineTimer: null,
+  sessionRunning: false
 };
 
 const elements = {
@@ -43,7 +48,12 @@ const elements = {
   previewModal: document.querySelector("[data-preview-modal]"),
   previewTitle: document.querySelector("#preview-title"),
   previewMeta: document.querySelector("#preview-meta"),
-  previewImage: document.querySelector("#preview-image")
+  previewImage: document.querySelector("#preview-image"),
+  captureCommand: document.querySelector('[data-command="capture"]'),
+  captureCodexCommand: document.querySelector('[data-command="capture-codex"]'),
+  timelineCommand: document.querySelector('[data-command="timeline"]'),
+  sessionCommand: document.querySelector('[data-command="session"]'),
+  intervalInput: document.querySelector("[data-interval-seconds]")
 };
 
 function svgIcon(name) {
@@ -55,6 +65,138 @@ function mountIcons(root = document) {
   root.querySelectorAll("[data-icon]").forEach((node) => {
     node.innerHTML = svgIcon(node.dataset.icon);
   });
+}
+
+function intervalMs() {
+  const seconds = Math.min(3600, Math.max(5, Number(elements.intervalInput?.value || 60)));
+  if (elements.intervalInput) {
+    elements.intervalInput.value = String(seconds);
+  }
+
+  return seconds * 1000;
+}
+
+function setCaptureBusy(busy) {
+  state.captureBusy = busy;
+  elements.captureCommand.disabled = busy;
+  elements.captureCodexCommand.disabled = busy;
+  elements.intervalInput.disabled = busy || state.timelineTimer !== null || state.sessionRunning;
+  elements.timelineCommand.disabled = busy && state.timelineTimer === null;
+  elements.sessionCommand.disabled = busy && !state.sessionRunning;
+}
+
+function applyCaptureResponse(response) {
+  state.root = response.root;
+  state.source = response.source;
+  state.captures = response.captures || [];
+  refreshFilteredCaptures();
+  state.selectedId = state.filteredCaptures[0]?.id || null;
+  renderAll();
+}
+
+async function loadCaptures(statusText) {
+  const response = await window.winshots.listCaptures();
+  applyCaptureResponse(response);
+  elements.sync.textContent = statusText || (state.captures.length > 0 ? "Synced just now" : "No local captures found");
+}
+
+function commandMessage(response, fallback) {
+  const command = response?.command;
+  if (command?.CodexPasteMessage) {
+    return command.CodexPasteMessage;
+  }
+
+  if (command?.DirectoryPath) {
+    return fallback;
+  }
+
+  return fallback;
+}
+
+async function runAppCapture({ pasteToCodex = false, reason = "electron", status = "Capturing..." } = {}) {
+  if (state.captureBusy) {
+    return;
+  }
+
+  try {
+    setCaptureBusy(true);
+    elements.sync.textContent = status;
+    const response = await window.winshots.captureNow({
+      pasteToCodex,
+      reason,
+      delayMs: 350
+    });
+    applyCaptureResponse(response);
+    elements.sync.textContent = commandMessage(response, pasteToCodex ? "Captured for Codex" : "Capture saved");
+  } catch (error) {
+    elements.sync.textContent = error.message || "Capture failed";
+  } finally {
+    setCaptureBusy(false);
+  }
+}
+
+function toggleTimeline() {
+  if (state.timelineTimer) {
+    window.clearInterval(state.timelineTimer);
+    state.timelineTimer = null;
+    elements.timelineCommand.classList.remove("active");
+    elements.timelineCommand.setAttribute("aria-pressed", "false");
+    elements.timelineCommand.querySelector("span:last-child").textContent = "Timeline";
+    elements.sync.textContent = "Timeline stopped";
+    setCaptureBusy(state.captureBusy);
+    return;
+  }
+
+  state.timelineTimer = window.setInterval(() => {
+    runAppCapture({ reason: "electron-timeline", status: "Timeline capture..." });
+  }, intervalMs());
+  elements.timelineCommand.classList.add("active");
+  elements.timelineCommand.setAttribute("aria-pressed", "true");
+  elements.timelineCommand.querySelector("span:last-child").textContent = "Stop timeline";
+  elements.sync.textContent = "Timeline running";
+  setCaptureBusy(state.captureBusy);
+  runAppCapture({ reason: "electron-timeline", status: "Timeline capture..." });
+}
+
+async function toggleSession() {
+  if (state.sessionRunning) {
+    try {
+      elements.sessionCommand.disabled = true;
+      elements.sync.textContent = "Finalizing session...";
+      const response = await window.winshots.stopVisualSession();
+      state.sessionRunning = false;
+      elements.sessionCommand.classList.remove("active");
+      elements.sessionCommand.setAttribute("aria-pressed", "false");
+      elements.sessionCommand.querySelector("span:last-child").textContent = "Session";
+      const frames = response?.manifest?.CapturedFrameCount ?? 0;
+      elements.sync.textContent = `Session saved (${frames} frames)`;
+    } catch (error) {
+      elements.sync.textContent = error.message || "Session stop failed";
+    } finally {
+      elements.sessionCommand.disabled = false;
+      setCaptureBusy(state.captureBusy);
+    }
+    return;
+  }
+
+  try {
+    elements.sessionCommand.disabled = true;
+    elements.sync.textContent = "Starting session...";
+    await window.winshots.startVisualSession({
+      intervalMs: intervalMs(),
+      durationSeconds: 300
+    });
+    state.sessionRunning = true;
+    elements.sessionCommand.classList.add("active");
+    elements.sessionCommand.setAttribute("aria-pressed", "true");
+    elements.sessionCommand.querySelector("span:last-child").textContent = "Stop session";
+    elements.sync.textContent = "Session recording";
+  } catch (error) {
+    elements.sync.textContent = error.message || "Session start failed";
+  } finally {
+    elements.sessionCommand.disabled = false;
+    setCaptureBusy(state.captureBusy);
+  }
 }
 
 function formatTime(capture) {
@@ -634,6 +776,24 @@ function bindEvents() {
       return;
     }
 
+    const commandButton = event.target.closest("[data-command]");
+    if (commandButton) {
+      const command = commandButton.dataset.command;
+      if (command === "capture") {
+        await runAppCapture({ reason: "electron", status: "Capturing..." });
+      }
+      if (command === "capture-codex") {
+        await runAppCapture({ pasteToCodex: true, reason: "electron-codex", status: "Capturing for Codex..." });
+      }
+      if (command === "timeline") {
+        toggleTimeline();
+      }
+      if (command === "session") {
+        await toggleSession();
+      }
+      return;
+    }
+
     const viewButton = event.target.closest("[data-view-mode]");
     if (viewButton) {
       setViewMode(viewButton.dataset.viewMode);
@@ -735,15 +895,7 @@ async function init() {
   bindEvents();
 
   try {
-    const response = await window.winshots.listCaptures();
-    state.root = response.root;
-    state.source = response.source;
-    state.captures = response.captures || [];
-    refreshFilteredCaptures();
-    state.selectedId = state.filteredCaptures[0]?.id || null;
-    updateTitle();
-    elements.sync.textContent = state.captures.length > 0 ? "Synced just now" : "No local captures found";
-    renderAll();
+    await loadCaptures();
   } catch (error) {
     elements.sync.textContent = "Capture load failed";
     elements.rows.innerHTML = `<div class="empty-state"><strong>Capture load failed</strong><span>${escapeHtml(error.message)}</span></div>`;
