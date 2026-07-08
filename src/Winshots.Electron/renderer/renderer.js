@@ -4,15 +4,13 @@ const iconPaths = {
   codex: '<circle cx="12" cy="12" r="9"/><path d="m9 12 2 2 4-5"/>',
   context: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/>',
   image: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="m21 16-5-5L5 19"/>',
-  settings: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9 7 7M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/>',
   theme: '<path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/><circle cx="12" cy="12" r="4"/>',
-  edit: '<path d="m4 16-.8 4 4-.8L18.5 7.9a2.1 2.1 0 0 0-3-3L4 16Z"/><path d="m13.5 6.5 4 4"/>',
   list: '<path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/>',
   grid: '<rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><rect x="14" y="14" width="6" height="6"/>',
-  tune: '<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>',
   folder: '<path d="M3 6h6l2 2h10v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6Z"/>',
   copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
-  trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 16h10l1-16"/>'
+  trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 16h10l1-16"/>',
+  close: '<path d="M18 6 6 18M6 6l12 12"/>'
 };
 
 const state = {
@@ -20,11 +18,16 @@ const state = {
   filteredCaptures: [],
   selectedId: null,
   filter: "all",
+  project: null,
+  viewMode: "list",
+  autoScroll: true,
+  previewId: null,
   root: "",
   source: ""
 };
 
 const elements = {
+  shell: document.querySelector(".app-shell"),
   rows: document.querySelector("#capture-rows"),
   count: document.querySelector("#capture-count"),
   metrics: document.querySelector("#summary-metrics"),
@@ -32,7 +35,15 @@ const elements = {
   inspector: document.querySelector("#inspector-body"),
   projects: document.querySelector("#project-list"),
   recent: document.querySelector("#recent-list"),
-  sync: document.querySelector("#sync-status")
+  sync: document.querySelector("#sync-status"),
+  tablePanel: document.querySelector(".table-panel"),
+  autoScroll: document.querySelector("[data-auto-scroll]"),
+  sidebarToggle: document.querySelector("[data-sidebar-toggle]"),
+  themeToggle: document.querySelector("[data-theme-toggle]"),
+  previewModal: document.querySelector("[data-preview-modal]"),
+  previewTitle: document.querySelector("#preview-title"),
+  previewMeta: document.querySelector("#preview-meta"),
+  previewImage: document.querySelector("#preview-image")
 };
 
 function svgIcon(name) {
@@ -119,20 +130,35 @@ function projectName(capture) {
   return capture.processName || "Local";
 }
 
-function applyFilter(captures) {
+function matchesPrimaryFilter(capture) {
   if (state.filter === "codex") {
-    return captures.filter((capture) => capture.reason.includes("codex"));
+    const text = `${capture.reason} ${capture.windowTitle} ${capture.processName}`.toLowerCase();
+    return text.includes("codex");
   }
 
   if (state.filter === "context") {
-    return captures.filter((capture) => capture.extractedTextLength > 0);
+    return capture.extractedTextLength > 0;
   }
 
   if (state.filter === "images") {
-    return captures.filter((capture) => Boolean(capture.screenshotUrl));
+    return Boolean(capture.screenshotUrl);
   }
 
-  return captures;
+  return true;
+}
+
+function applyFilters(captures = state.captures) {
+  return captures.filter((capture) => {
+    const projectMatches = !state.project || projectName(capture) === state.project;
+    return projectMatches && matchesPrimaryFilter(capture);
+  });
+}
+
+function refreshFilteredCaptures() {
+  state.filteredCaptures = applyFilters();
+  if (!state.filteredCaptures.some((capture) => capture.id === state.selectedId)) {
+    state.selectedId = state.filteredCaptures[0]?.id || null;
+  }
 }
 
 function renderMetrics() {
@@ -158,6 +184,8 @@ function renderMetrics() {
 }
 
 function renderRows() {
+  elements.tablePanel.classList.toggle("grid-mode", state.viewMode === "grid");
+
   if (state.filteredCaptures.length === 0) {
     elements.rows.innerHTML = `
       <div class="empty-state">
@@ -169,31 +197,73 @@ function renderRows() {
     return;
   }
 
+  if (state.viewMode === "grid") {
+    renderGridRows();
+  } else {
+    renderListRows();
+  }
+
+  elements.count.textContent = `${state.filteredCaptures.length} captures`;
+  scrollSelectionIntoView();
+}
+
+function renderListRows() {
   elements.rows.innerHTML = state.filteredCaptures
     .map((capture, index) => {
       const active = capture.id === state.selectedId ? " active" : "";
-      const thumbnail = capture.screenshotUrl
-        ? `<img src="${capture.screenshotUrl}" alt="Screenshot preview for ${escapeHtml(captureTitle(capture))}" />`
-        : `<span class="missing-thumb">No image</span>`;
       const labels = labelsFor(capture)
         .map((label) => `<span class="label-pill"><span></span>${escapeHtml(label)}</span>`)
         .join("");
 
       return `
-        <button class="capture-row data-row${active}" role="row" type="button" data-capture-id="${escapeHtml(capture.id)}">
+        <div class="capture-row data-row${active}" role="row" tabindex="0" data-capture-row data-capture-id="${escapeHtml(capture.id)}">
           <span role="cell">${String(index + 1).padStart(2, "0")}</span>
-          <span role="cell" class="preview-cell">${thumbnail}</span>
+          <span role="cell" class="preview-cell">${thumbnailMarkup(capture)}</span>
           <span role="cell" class="title-cell">${escapeHtml(captureTitle(capture))}</span>
           <span role="cell">${formatTime(capture)}</span>
           <span role="cell">${formatDuration(capture)}</span>
           <span role="cell" class="labels-cell">${labels}</span>
-          <span role="cell" class="more-cell">...</span>
-        </button>
+        </div>
       `;
     })
     .join("");
+}
 
-  elements.count.textContent = `${state.filteredCaptures.length} captures`;
+function renderGridRows() {
+  elements.rows.innerHTML = state.filteredCaptures
+    .map((capture) => {
+      const active = capture.id === state.selectedId ? " active" : "";
+      const labels = labelsFor(capture)
+        .map((label) => `<span class="label-pill"><span></span>${escapeHtml(label)}</span>`)
+        .join("");
+
+      return `
+        <article class="capture-card${active}" tabindex="0" data-capture-row data-capture-id="${escapeHtml(capture.id)}">
+          ${thumbnailMarkup(capture)}
+          <div>
+            <span class="capture-card-title">${escapeHtml(captureTitle(capture))}</span>
+            <div class="capture-card-meta">
+              <span>${formatTime(capture)}</span>
+              <span>${formatDuration(capture)}</span>
+            </div>
+            <div class="labels-cell">${labels}</div>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function thumbnailMarkup(capture) {
+  if (!capture.screenshotUrl) {
+    return `<span class="missing-thumb">No image</span>`;
+  }
+
+  return `
+    <button type="button" class="thumbnail-button" data-open-preview data-capture-id="${escapeHtml(capture.id)}" aria-label="Open large preview for ${escapeHtml(captureTitle(capture))}">
+      <img src="${capture.screenshotUrl}" alt="Screenshot preview for ${escapeHtml(captureTitle(capture))}" />
+    </button>
+  `;
 }
 
 function renderProjects() {
@@ -203,11 +273,17 @@ function renderProjects() {
     counts.set(name, (counts.get(name) || 0) + 1);
   });
 
+  if (counts.size === 0) {
+    elements.projects.innerHTML = `<p class="muted">No projects</p>`;
+    return;
+  }
+
   elements.projects.innerHTML = [...counts.entries()]
     .slice(0, 5)
     .map(([name, count]) => {
+      const active = name === state.project ? " active" : "";
       return `
-        <button type="button" class="project-item">
+        <button type="button" class="project-item${active}" data-project="${escapeHtml(name)}" aria-pressed="${name === state.project}">
           <span>${svgIcon("folder")}${escapeHtml(name)}</span>
           <span>${count}</span>
         </button>
@@ -276,14 +352,21 @@ async function renderInspector() {
     </section>
     <section class="inspector-section">
       <h4>Actions</h4>
-      <button type="button" class="action-row" data-action="open-folder">${svgIcon("folder")}Open file location</button>
-      <button type="button" class="action-row" data-action="copy-image">${svgIcon("image")}Copy image</button>
-      <button type="button" class="action-row" data-action="copy-path">${svgIcon("copy")}Copy image path</button>
-      <button type="button" class="action-row" data-action="copy-context">${svgIcon("context")}Copy context</button>
-      <button type="button" class="action-row" data-action="copy-metadata">${svgIcon("copy")}Copy metadata</button>
-      <button type="button" class="action-row danger" data-action="trash">${svgIcon("trash")}Move to Recycle Bin</button>
+      ${actionButton("open-preview", "image", "Open large preview", !capture.screenshotUrl)}
+      ${actionButton("open-folder", "folder", "Open file location")}
+      ${actionButton("copy-image", "image", "Copy image", !capture.screenshotUrl)}
+      ${actionButton("copy-path", "copy", "Copy image path", !capture.screenshotPath)}
+      ${actionButton("copy-context", "context", "Copy context", !capture.textPath)}
+      ${actionButton("copy-metadata", "copy", "Copy metadata", !capture.metadataPath)}
+      ${actionButton("trash", "trash", "Move to Recycle Bin", false, true)}
     </section>
   `;
+}
+
+function actionButton(action, icon, label, disabled = false, danger = false) {
+  const disabledAttributes = disabled ? ' disabled aria-disabled="true"' : "";
+  const dangerClass = danger ? " danger" : "";
+  return `<button type="button" class="action-row${dangerClass}" data-action="${action}"${disabledAttributes}>${svgIcon(icon)}${escapeHtml(label)}</button>`;
 }
 
 function contextPreview(context) {
@@ -313,18 +396,29 @@ function updateSelection(captureId) {
 
 function applyActiveFilter(filter) {
   state.filter = filter;
-  state.filteredCaptures = applyFilter(state.captures);
-  state.selectedId = state.filteredCaptures[0]?.id || null;
+  state.project = null;
+  refreshFilteredCaptures();
   document.querySelectorAll(".nav-item").forEach((item) => {
     item.classList.toggle("active", item.dataset.filter === filter);
   });
-  elements.title.textContent = titleForFilter(filter);
+  updateTitle();
+  renderAll();
+}
+
+function applyProjectFilter(project) {
+  state.project = project;
+  state.filter = "all";
+  refreshFilteredCaptures();
+  document.querySelectorAll(".nav-item").forEach((item) => {
+    item.classList.toggle("active", item.dataset.filter === "all");
+  });
+  updateTitle();
   renderAll();
 }
 
 function titleForFilter(filter) {
   const titles = {
-    all: state.selectedId || "Winshots captures",
+    all: "Winshots captures",
     codex: "Codex-ready captures",
     context: "Captures with context",
     images: "Captures with screenshots"
@@ -333,19 +427,232 @@ function titleForFilter(filter) {
   return titles[filter] || "Winshots captures";
 }
 
+function updateTitle() {
+  elements.title.textContent = state.project ? `${state.project} captures` : titleForFilter(state.filter);
+}
+
 function renderAll() {
+  updateTitle();
   renderMetrics();
   renderRows();
   renderProjects();
   renderRecent();
   renderInspector();
+  renderPreview();
+}
+
+function setViewMode(mode) {
+  state.viewMode = mode === "grid" ? "grid" : "list";
+  document.querySelectorAll("[data-view-mode]").forEach((button) => {
+    const active = button.dataset.viewMode === state.viewMode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  elements.sync.textContent = state.viewMode === "grid" ? "Grid view" : "List view";
+  renderRows();
+}
+
+function scrollSelectionIntoView() {
+  if (!state.autoScroll || !state.selectedId) {
+    return;
+  }
+
+  requestAnimationFrame(() => {
+    const selectedRow = [...elements.rows.querySelectorAll("[data-capture-row]")]
+      .find((row) => row.dataset.captureId === state.selectedId);
+    selectedRow?.scrollIntoView({ block: "nearest" });
+  });
+}
+
+function toggleSidebar() {
+  const collapsed = !elements.shell.classList.contains("sidebar-collapsed");
+  elements.shell.classList.toggle("sidebar-collapsed", collapsed);
+  elements.sidebarToggle.setAttribute("aria-pressed", String(collapsed));
+  elements.sync.textContent = collapsed ? "Sidebar collapsed" : "Sidebar expanded";
+}
+
+function applyStoredTheme() {
+  let focusTheme = false;
+  try {
+    focusTheme = window.localStorage.getItem("winshots.focusTheme") === "true";
+  } catch {
+    focusTheme = false;
+  }
+
+  document.body.classList.toggle("focus-theme", focusTheme);
+  elements.themeToggle.setAttribute("aria-pressed", String(focusTheme));
+}
+
+function toggleTheme() {
+  const focusTheme = !document.body.classList.contains("focus-theme");
+  document.body.classList.toggle("focus-theme", focusTheme);
+  elements.themeToggle.setAttribute("aria-pressed", String(focusTheme));
+  try {
+    window.localStorage.setItem("winshots.focusTheme", String(focusTheme));
+  } catch {
+    // Local storage is best-effort for file-backed Electron pages.
+  }
+  elements.sync.textContent = focusTheme ? "Focus theme enabled" : "Default theme enabled";
+}
+
+function captureById(captureId) {
+  return state.captures.find((capture) => capture.id === captureId);
+}
+
+function openPreview(captureId) {
+  const capture = captureById(captureId);
+  if (!capture?.screenshotUrl) {
+    elements.sync.textContent = "No screenshot is available for this capture";
+    return;
+  }
+
+  if (state.selectedId !== capture.id) {
+    updateSelection(capture.id);
+  }
+
+  state.previewId = capture.id;
+  elements.previewModal.hidden = false;
+  renderPreview();
+  elements.previewModal.querySelector("[data-preview-close]")?.focus();
+}
+
+function closePreview() {
+  state.previewId = null;
+  elements.previewModal.hidden = true;
+  elements.previewImage.removeAttribute("src");
+}
+
+function renderPreview() {
+  if (!state.previewId || elements.previewModal.hidden) {
+    return;
+  }
+
+  const capture = captureById(state.previewId);
+  if (!capture?.screenshotUrl) {
+    closePreview();
+    return;
+  }
+
+  elements.previewTitle.textContent = captureTitle(capture);
+  elements.previewMeta.textContent = `${capture.id} | ${capture.timestampLocal || capture.timestampUtc || "Unknown time"} | ${capture.resolution}`;
+  elements.previewImage.src = capture.screenshotUrl;
+  elements.previewImage.alt = `Large screenshot preview for ${captureTitle(capture)}`;
+  setModalAction("copy-image", "image", "Copy image", !capture.screenshotUrl);
+  setModalAction("copy-path", "copy", "Copy path", !capture.screenshotPath);
+  setModalAction("open-folder", "folder", "Open folder", false);
+}
+
+function setModalAction(action, icon, label, disabled = false) {
+  const button = elements.previewModal.querySelector(`[data-modal-action="${action}"]`);
+  if (!button) {
+    return;
+  }
+
+  button.innerHTML = `${svgIcon(icon)}${escapeHtml(label)}`;
+  button.disabled = disabled;
+  button.setAttribute("aria-disabled", String(disabled));
+}
+
+async function runCaptureAction(action, captureId) {
+  if (action === "open-preview") {
+    openPreview(captureId);
+    return "";
+  }
+
+  if (action === "open-folder") {
+    await window.winshots.openCaptureFolder(captureId);
+    return "Opened capture folder";
+  }
+
+  if (action === "copy-image") {
+    await window.winshots.copyScreenshotImage(captureId);
+    return "Image copied";
+  }
+
+  if (action === "copy-path") {
+    await window.winshots.copyScreenshotPath(captureId);
+    return "Image path copied";
+  }
+
+  if (action === "copy-context") {
+    await window.winshots.copyCaptureContext(captureId);
+    return "Context copied";
+  }
+
+  if (action === "copy-metadata") {
+    await window.winshots.copyCaptureMetadata(captureId);
+    return "Metadata copied";
+  }
+
+  if (action === "trash") {
+    if (!window.confirm(`Move capture ${captureId} to the Recycle Bin?`)) {
+      return "";
+    }
+
+    const response = await window.winshots.trashCapture(captureId);
+    state.root = response.root;
+    state.source = response.source;
+    state.captures = response.captures || [];
+    refreshFilteredCaptures();
+    if (state.previewId === captureId) {
+      closePreview();
+    }
+    renderAll();
+    return "Capture moved to Recycle Bin";
+  }
+
+  return "";
 }
 
 function bindEvents() {
   document.addEventListener("click", async (event) => {
-    const captureButton = event.target.closest("[data-capture-id]");
-    if (captureButton) {
-      updateSelection(captureButton.dataset.captureId);
+    const disabledControl = event.target.closest("button[disabled], [aria-disabled='true']");
+    if (disabledControl) {
+      event.preventDefault();
+      return;
+    }
+
+    if (event.target.closest("[data-preview-close]")) {
+      closePreview();
+      return;
+    }
+
+    const modalAction = event.target.closest("[data-modal-action]");
+    if (modalAction && state.previewId) {
+      try {
+        const status = await runCaptureAction(modalAction.dataset.modalAction, state.previewId);
+        if (status) elements.sync.textContent = status;
+      } catch (error) {
+        elements.sync.textContent = error.message || "Capture action failed";
+      }
+      return;
+    }
+
+    const previewButton = event.target.closest("[data-open-preview]");
+    if (previewButton) {
+      openPreview(previewButton.dataset.captureId);
+      return;
+    }
+
+    const viewButton = event.target.closest("[data-view-mode]");
+    if (viewButton) {
+      setViewMode(viewButton.dataset.viewMode);
+      return;
+    }
+
+    if (event.target.closest("[data-sidebar-toggle]")) {
+      toggleSidebar();
+      return;
+    }
+
+    if (event.target.closest("[data-theme-toggle]")) {
+      toggleTheme();
+      return;
+    }
+
+    const projectButton = event.target.closest("[data-project]");
+    if (projectButton) {
+      applyProjectFilter(projectButton.dataset.project);
       return;
     }
 
@@ -367,46 +674,43 @@ function bindEvents() {
     const inspectorAction = event.target.closest("[data-action]");
     if (inspectorAction && state.selectedId) {
       try {
-        if (inspectorAction.dataset.action === "open-folder") {
-          await window.winshots.openCaptureFolder(state.selectedId);
-          elements.sync.textContent = "Opened capture folder";
-        }
-        if (inspectorAction.dataset.action === "copy-image") {
-          await window.winshots.copyScreenshotImage(state.selectedId);
-          elements.sync.textContent = "Image copied";
-        }
-        if (inspectorAction.dataset.action === "copy-path") {
-          await window.winshots.copyScreenshotPath(state.selectedId);
-          elements.sync.textContent = "Image path copied";
-        }
-        if (inspectorAction.dataset.action === "copy-context") {
-          await window.winshots.copyCaptureContext(state.selectedId);
-          elements.sync.textContent = "Context copied";
-        }
-        if (inspectorAction.dataset.action === "copy-metadata") {
-          await window.winshots.copyCaptureMetadata(state.selectedId);
-          elements.sync.textContent = "Metadata copied";
-        }
-        if (inspectorAction.dataset.action === "trash") {
-          const captureId = state.selectedId;
-          if (!window.confirm(`Move capture ${captureId} to the Recycle Bin?`)) {
-            return;
-          }
-
-          const response = await window.winshots.trashCapture(captureId);
-          state.root = response.root;
-          state.source = response.source;
-          state.captures = response.captures || [];
-          state.filteredCaptures = applyFilter(state.captures);
-          state.selectedId = state.filteredCaptures[0]?.id || null;
-          elements.title.textContent = titleForFilter(state.filter);
-          elements.sync.textContent = "Capture moved to Recycle Bin";
-          renderAll();
-        }
+        const status = await runCaptureAction(inspectorAction.dataset.action, state.selectedId);
+        if (status) elements.sync.textContent = status;
       } catch (error) {
         elements.sync.textContent = error.message || "Capture action failed";
       }
+      return;
     }
+
+    const recentButton = event.target.closest(".recent-item[data-capture-id]");
+    if (recentButton) {
+      updateSelection(recentButton.dataset.captureId);
+      return;
+    }
+
+    const captureRow = event.target.closest("[data-capture-row]");
+    if (captureRow) {
+      updateSelection(captureRow.dataset.captureId);
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !elements.previewModal.hidden) {
+      closePreview();
+      return;
+    }
+
+    const captureRow = event.target.closest("[data-capture-row]");
+    if (captureRow && event.target === captureRow && (event.key === "Enter" || event.key === " ")) {
+      event.preventDefault();
+      updateSelection(captureRow.dataset.captureId);
+    }
+  });
+
+  elements.autoScroll.addEventListener("change", () => {
+    state.autoScroll = elements.autoScroll.checked;
+    elements.sync.textContent = state.autoScroll ? "Auto-scroll enabled" : "Auto-scroll disabled";
+    scrollSelectionIntoView();
   });
 }
 
@@ -427,6 +731,7 @@ async function waitForImages() {
 
 async function init() {
   mountIcons();
+  applyStoredTheme();
   bindEvents();
 
   try {
@@ -434,9 +739,9 @@ async function init() {
     state.root = response.root;
     state.source = response.source;
     state.captures = response.captures || [];
-    state.filteredCaptures = applyFilter(state.captures);
-    state.selectedId = state.filteredCaptures[1]?.id || state.filteredCaptures[0]?.id || null;
-    elements.title.textContent = state.selectedId || "Winshots captures";
+    refreshFilteredCaptures();
+    state.selectedId = state.filteredCaptures[0]?.id || null;
+    updateTitle();
     elements.sync.textContent = state.captures.length > 0 ? "Synced just now" : "No local captures found";
     renderAll();
   } catch (error) {

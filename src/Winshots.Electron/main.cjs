@@ -7,6 +7,7 @@ const { app, BrowserWindow, clipboard, ipcMain, nativeImage, shell } = require("
 const rendererPath = path.join(__dirname, "renderer", "index.html");
 const isSmoke = process.argv.includes("--smoke");
 const screenshotPath = readArgValue("--screenshot");
+const screenshotMode = readArgValue("--screenshot-mode") || "main";
 
 let mainWindow;
 let smokeTimer;
@@ -286,6 +287,31 @@ async function captureScreenshotAndExit() {
   }
 }
 
+async function prepareScreenshotMode() {
+  if (!mainWindow) {
+    return;
+  }
+
+  const selectorByMode = {
+    grid: '[data-view-mode="grid"]',
+    preview: "[data-open-preview]"
+  };
+  const selector = selectorByMode[screenshotMode];
+  if (!selector) {
+    return;
+  }
+
+  await mainWindow.webContents.executeJavaScript(`
+    new Promise((resolve) => {
+      const trigger = document.querySelector(${JSON.stringify(selector)});
+      if (trigger) {
+        trigger.click();
+      }
+      setTimeout(resolve, 450);
+    });
+  `);
+}
+
 ipcMain.handle("captures:list", () => listCaptures());
 
 ipcMain.handle("captures:context", (_event, captureId) => {
@@ -378,6 +404,7 @@ ipcMain.on("renderer:ready", async () => {
 
   if (screenshotPath) {
     await new Promise((resolve) => setTimeout(resolve, 250));
+    await prepareScreenshotMode();
     await captureScreenshotAndExit();
     return;
   }
