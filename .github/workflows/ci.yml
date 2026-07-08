@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: npm
+
+      - run: dotnet restore .\Winshots.slnx
+
+      - run: dotnet build .\Winshots.slnx --configuration Release --no-restore
+
+      - run: dotnet test .\Winshots.slnx --configuration Release --no-build
+
+      - run: npm ci
+
+      - run: npm run ui:smoke
+
+      - run: .\scripts\smoke-mcp.ps1
+        shell: pwsh

@@ -4,7 +4,7 @@ Winshots is a local Windows capture tool for Codex debugging.
 
 It captures a Windows app screenshot plus best-effort Windows UI Automation text, stores everything locally, and offers manual capture, periodic capture, targeted MCP capture, and Codex-friendly visual debugging sessions.
 
-Winshots is Windows-only and currently a V1 prototype.
+Winshots is Windows-only and currently a 1.0 local release.
 
 ## V1 Features
 
@@ -39,10 +39,38 @@ If Codex App is not already running, Windows refuses to focus it, or Winshots ca
 ## Requirements
 
 - Windows 10 or 11
-- .NET 8 SDK
-- Node.js and npm for the Electron review UI
+- .NET 8 SDK for source builds
+- Node.js and npm for source Electron review UI work
 - Optional: `ffmpeg` on `PATH` to create visual session `video.mp4` files
 - Optional: Codex Desktop/CLI for Capture to Codex and MCP workflows
+
+## Install
+
+Download the `winshots-1.0.0-win-x64.zip` release archive, extract it, then run:
+
+```powershell
+.\install.ps1
+```
+
+The installer copies the app and MCP server to:
+
+```text
+%LOCALAPPDATA%\Programs\Winshots
+```
+
+It also refreshes the local Codex plugin `winshots@winshots-local` when the `codex` CLI is available. Open a new Codex thread after installing so the plugin skills and MCP tools are loaded.
+
+Build the installer package locally with:
+
+```powershell
+.\scripts\build-release.ps1 -Version 1.0.0
+```
+
+The package is written to:
+
+```text
+artifacts\release\winshots-1.0.0-win-x64.zip
+```
 
 ## Run
 

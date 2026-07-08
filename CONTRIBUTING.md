@@ -1,6 +1,6 @@
 # Contributing
 
-Winshots is a local Windows V1 prototype. Keep contributions small, verifiable, and aligned with the current product surface.
+Winshots is a local Windows 1.0 release. Keep contributions small, verifiable, and aligned with the current product surface.
 
 ## Development Setup
 
@@ -37,6 +37,12 @@ For Electron UI changes:
 
 ```powershell
 npm run ui:smoke
+```
+
+For installer or release workflow changes:
+
+```powershell
+.\scripts\build-release.ps1 -Version 1.0.0
 ```
 
 ## Contribution Rules

@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - v*
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version
+        required: true
+        default: 1.0.0
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Resolve version
+        shell: pwsh
+        run: |
+          $version = "${{ github.event.inputs.version }}"
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            $version = "${{ github.ref_name }}".TrimStart("v")
+          }
+          "WINSHOTS_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Build installer package
+        shell: pwsh
+        run: .\scripts\build-release.ps1 -Version $env:WINSHOTS_VERSION
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: winshots-${{ env.WINSHOTS_VERSION }}-win-x64
+          path: |
+            artifacts/release/winshots-${{ env.WINSHOTS_VERSION }}-win-x64.zip
+            artifacts/release/winshots-${{ env.WINSHOTS_VERSION }}-win-x64.zip.sha256
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "v$env:WINSHOTS_VERSION"
+          $zip = "artifacts/release/winshots-$env:WINSHOTS_VERSION-win-x64.zip"
+          $checksum = "$zip.sha256"
+          $notes = "artifacts/release/RELEASE_NOTES.md"
+
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $zip $checksum --clobber
+          } else {
+            gh release create $tag $zip $checksum --title "Winshots $env:WINSHOTS_VERSION" --notes-file $notes --target "${{ github.sha }}" --latest
+          }

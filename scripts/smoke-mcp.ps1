@@ -26,7 +26,7 @@ $messages = @(
             capabilities = @{}
             clientInfo = @{
                 name = "winshots-smoke"
-                version = "0.1"
+                version = "1.0.0"
             }
         }
     }
