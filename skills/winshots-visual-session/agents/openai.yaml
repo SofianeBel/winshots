@@ -1,0 +1,13 @@
+interface:
+  display_name: "Winshots Visual Session"
+  short_description: "Record local visual debugging sessions"
+  default_prompt: "Use $winshots-visual-session to record a short local visual debugging session."
+  brand_color: "#2563EB"
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "winshots"
+      description: "Local Winshots MCP stdio server"
+      transport: "stdio"
+policy:
+  allow_implicit_invocation: true

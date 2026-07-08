@@ -1,0 +1,13 @@
+interface:
+  display_name: "Winshots MCP Capture"
+  short_description: "Capture Windows app state with Winshots"
+  default_prompt: "Use $winshots-mcp-capture to capture the current Windows app for debugging."
+  brand_color: "#2563EB"
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "winshots"
+      description: "Local Winshots MCP stdio server"
+      transport: "stdio"
+policy:
+  allow_implicit_invocation: true

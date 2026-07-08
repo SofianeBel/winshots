@@ -1,0 +1,37 @@
+{
+  "name": "winshots",
+  "version": "0.1.0",
+  "description": "Local Windows capture workflows for Codex debugging with Winshots and its MCP server.",
+  "author": {
+    "name": "Winshots"
+  },
+  "license": "UNLICENSED",
+  "keywords": [
+    "windows",
+    "screenshots",
+    "mcp",
+    "debugging",
+    "codex"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Winshots",
+    "shortDescription": "Capture local Windows app state for Codex",
+    "longDescription": "Winshots gives Codex local-first workflows for capturing visible Windows app state, UI Automation text, targeted windows, recent captures, and short visual debugging sessions through the Winshots MCP server.",
+    "developerName": "Winshots",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Capture the current Windows app with Winshots and summarize what Codex should inspect.",
+      "Use Winshots to target a visible app window and collect screenshot plus UI context.",
+      "Record a short Winshots visual session for this UI bug."
+    ],
+    "brandColor": "#2563EB",
+    "screenshots": []
+  }
+}

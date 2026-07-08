@@ -138,6 +138,20 @@ Smoke-test the MCP server:
 
 For real examples, the smoke script opens YouTube and Twitter/X in browser windows when `-OpenWebExamples` is set. It captures Discord and Steam too when matching capturable windows are already open, or when `-LaunchDesktopApps` successfully starts them.
 
+## Codex Plugin
+
+This repo also ships a local Codex plugin for Winshots. It bundles the Winshots MCP server config and skills that tell Codex when to use targeted captures, active-window captures, recent capture context, and short visual sessions.
+
+From the repo root, build the MCP server, then add the local marketplace and install the plugin:
+
+```powershell
+dotnet build .\Winshots.slnx
+codex plugin marketplace add .
+codex plugin add winshots@winshots-local
+```
+
+Open a new Codex thread after installing so the plugin skills and MCP server are loaded.
+
 Default app captures are written to:
 
 ```text

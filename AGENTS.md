@@ -74,3 +74,4 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 - For general validation, run `dotnet build .\Winshots.slnx` and `dotnet test .\Winshots.slnx --no-build`.
 - When touching the Electron UI, also run `npm run ui:smoke` after dependencies are installed.
 - When touching MCP tools or Codex integration, run `.\scripts\smoke-mcp.ps1`; use `.\scripts\smoke-mcp.ps1 -Capture` or `-Session` for capture/session coverage.
+- The Codex plugin surface lives in `.codex-plugin/plugin.json`, `.mcp.json`, `.agents/plugins/marketplace.json`, and `skills/`; keep these aligned with the actual Winshots MCP tools and local-first privacy model.

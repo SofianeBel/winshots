@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "winshots": {
+      "command": "dotnet",
+      "args": [
+        "./src/Winshots.Mcp/bin/Debug/net8.0-windows/Winshots.Mcp.dll"
+      ],
+      "cwd": ".",
+      "startup_timeout_sec": 60.0,
+      "tool_timeout_sec": 120
+    }
+  }
+}
