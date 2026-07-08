@@ -52,6 +52,8 @@ jobs:
         with:
           name: winshots-${{ env.WINSHOTS_VERSION }}-win-x64
           path: |
+            artifacts/release/winshots-${{ env.WINSHOTS_VERSION }}-win-x64.exe
+            artifacts/release/winshots-${{ env.WINSHOTS_VERSION }}-win-x64.exe.sha256
             artifacts/release/winshots-${{ env.WINSHOTS_VERSION }}-win-x64.zip
             artifacts/release/winshots-${{ env.WINSHOTS_VERSION }}-win-x64.zip.sha256
 
@@ -61,13 +63,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "v$env:WINSHOTS_VERSION"
+          $exe = "artifacts/release/winshots-$env:WINSHOTS_VERSION-win-x64.exe"
+          $exeChecksum = "$exe.sha256"
           $zip = "artifacts/release/winshots-$env:WINSHOTS_VERSION-win-x64.zip"
           $checksum = "$zip.sha256"
           $notes = "artifacts/release/RELEASE_NOTES.md"
 
           gh release view $tag *> $null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload $tag $zip $checksum --clobber
+            gh release upload $tag $exe $exeChecksum $zip $checksum --clobber
           } else {
-            gh release create $tag $zip $checksum --title "Winshots $env:WINSHOTS_VERSION" --notes-file $notes --target "${{ github.sha }}" --latest
+            gh release create $tag $exe $exeChecksum $zip $checksum --title "Winshots $env:WINSHOTS_VERSION" --notes-file $notes --target "${{ github.sha }}" --latest
           }

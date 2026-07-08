@@ -46,7 +46,13 @@ If Codex App is not already running, Windows refuses to focus it, or Winshots ca
 
 ## Install
 
-Download the `winshots-1.0.0-win-x64.zip` release archive, extract it, then run:
+For the standalone Windows app executable, download:
+
+```text
+winshots-1.0.0-win-x64.exe
+```
+
+For the full installer package with the MCP server and Codex plugin files, download the `winshots-1.0.0-win-x64.zip` release archive, extract it, then run:
 
 ```powershell
 .\install.ps1
@@ -66,9 +72,10 @@ Build the installer package locally with:
 .\scripts\build-release.ps1 -Version 1.0.0
 ```
 
-The package is written to:
+The release files are written to:
 
 ```text
+artifacts\release\winshots-1.0.0-win-x64.exe
 artifacts\release\winshots-1.0.0-win-x64.zip
 ```
 

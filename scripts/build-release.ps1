@@ -29,16 +29,23 @@ if (-not $outputRootPath.StartsWith($artifactsRoot, [System.StringComparison]::O
 
 $packageName = "winshots-$Version-$Runtime"
 $stagingRoot = Join-Path $outputRootPath $packageName
+$singlePublishRoot = Join-Path $outputRootPath "$packageName-single"
+$singleExePath = Join-Path $outputRootPath "$packageName.exe"
+$singleChecksumPath = "$singleExePath.sha256"
 $zipPath = Join-Path $outputRootPath "$packageName.zip"
 $checksumPath = "$zipPath.sha256"
 
 if (Test-Path $stagingRoot) {
     Remove-Item -LiteralPath $stagingRoot -Recurse -Force
 }
+if (Test-Path $singlePublishRoot) {
+    Remove-Item -LiteralPath $singlePublishRoot -Recurse -Force
+}
 
 New-Item -ItemType Directory -Force -Path $stagingRoot | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $stagingRoot "app") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $stagingRoot "mcp") | Out-Null
+New-Item -ItemType Directory -Force -Path $singlePublishRoot | Out-Null
 
 Invoke-CheckedNative "dotnet" @(
     "publish",
@@ -67,6 +74,28 @@ Invoke-CheckedNative "dotnet" @(
     (Join-Path $stagingRoot "mcp"),
     "-p:Version=$Version"
 )
+
+Invoke-CheckedNative "dotnet" @(
+    "publish",
+    (Join-Path $root "src\Winshots.App\Winshots.App.csproj"),
+    "--configuration",
+    $Configuration,
+    "--runtime",
+    $Runtime,
+    "--self-contained",
+    "true",
+    "--output",
+    $singlePublishRoot,
+    "-p:Version=$Version",
+    "-p:PublishSingleFile=true",
+    "-p:IncludeNativeLibrariesForSelfExtract=true",
+    "-p:EnableCompressionInSingleFile=true"
+)
+
+if (Test-Path $singleExePath) {
+    Remove-Item -LiteralPath $singleExePath -Force
+}
+Copy-Item -LiteralPath (Join-Path $singlePublishRoot "Winshots.App.exe") -Destination $singleExePath -Force
 
 Copy-Item -LiteralPath (Join-Path $root ".codex-plugin") -Destination (Join-Path $stagingRoot ".codex-plugin") -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $root ".agents") -Destination (Join-Path $stagingRoot ".agents") -Recurse -Force
@@ -126,6 +155,8 @@ $releaseNotes = @"
 
 - Includes the Winshots Windows app and the Winshots MCP server.
 - Includes the Codex plugin files at version $Version.
+- Download $packageName.exe for the standalone app executable.
+- Download $packageName.zip for the full installer package with MCP and Codex plugin files.
 - Run install.ps1 from the extracted archive to install under %LOCALAPPDATA%\Programs\Winshots.
 - Captures and sessions stay local under the user's Documents folder unless the user shares them explicitly.
 "@
@@ -138,6 +169,10 @@ Get-ChildItem -LiteralPath $stagingRoot -Force | Compress-Archive -DestinationPa
 
 $hash = Get-FileHash -Path $zipPath -Algorithm SHA256
 Set-Content -Path $checksumPath -Value "$($hash.Hash)  $(Split-Path -Leaf $zipPath)" -Encoding ASCII
+$singleHash = Get-FileHash -Path $singleExePath -Algorithm SHA256
+Set-Content -Path $singleChecksumPath -Value "$($singleHash.Hash)  $(Split-Path -Leaf $singleExePath)" -Encoding ASCII
 
 Write-Host "Release package: $zipPath"
 Write-Host "SHA256: $checksumPath"
+Write-Host "Standalone executable: $singleExePath"
+Write-Host "SHA256: $singleChecksumPath"
