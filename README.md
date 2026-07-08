@@ -46,13 +46,13 @@ If Codex App is not already running, Windows refuses to focus it, or Winshots ca
 
 ## Install
 
-For the standalone Windows app executable, download:
+For the Windows launcher executable, download:
 
 ```text
 winshots-1.0.0-win-x64.exe
 ```
 
-For the full installer package with the MCP server and Codex plugin files, download the `winshots-1.0.0-win-x64.zip` release archive, extract it, then run:
+The launcher opens the Electron UI when the full package folder is available beside it. For the full Electron UI, MCP server, and Codex plugin files, download the `winshots-1.0.0-win-x64.zip` release archive, extract it, then run:
 
 ```powershell
 .\install.ps1
@@ -84,6 +84,8 @@ artifacts\release\winshots-1.0.0-win-x64.zip
 ```powershell
 dotnet run --project .\src\Winshots.App\Winshots.App.csproj
 ```
+
+Use `--winforms` only to force the legacy WinForms fallback.
 
 ## Electron UI
 

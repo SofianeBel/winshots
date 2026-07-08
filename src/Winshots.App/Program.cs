@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Winshots.App.Capture;
 using Winshots.App.Codex;
 using Winshots.App.UI;
@@ -19,6 +20,24 @@ internal static class Program
         if (args.Length > 0 && string.Equals(args[0], "record-session", StringComparison.OrdinalIgnoreCase))
         {
             Environment.ExitCode = RunRecordSessionAsync(args[1..]).GetAwaiter().GetResult();
+            return;
+        }
+
+        bool forceWinForms = args.Length > 0 && string.Equals(args[0], "--winforms", StringComparison.OrdinalIgnoreCase);
+        if (forceWinForms)
+        {
+            args = args[1..];
+        }
+        else
+        {
+            if (TryRunElectronUi(args, out int electronExitCode))
+            {
+                Environment.ExitCode = electronExitCode;
+                return;
+            }
+
+            ReportMissingElectronUi();
+            Environment.ExitCode = 1;
             return;
         }
 
@@ -244,5 +263,155 @@ internal static class Program
         }
 
         return await recorder.WaitForCompletionAsync().ConfigureAwait(false);
+    }
+
+    private static bool TryRunElectronUi(string[] args, out int exitCode)
+    {
+        exitCode = 0;
+        if (!TryResolveElectronUi(out string electronExe, out string electronUi, out string workingDirectory))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var process = new Process();
+            process.StartInfo.FileName = electronExe;
+            process.StartInfo.WorkingDirectory = workingDirectory;
+            process.StartInfo.UseShellExecute = false;
+            process.StartInfo.CreateNoWindow = true;
+            process.StartInfo.ArgumentList.Add(electronUi);
+            foreach (string arg in args)
+            {
+                process.StartInfo.ArgumentList.Add(arg);
+            }
+
+            process.Start();
+            if (ShouldWaitForElectron(args))
+            {
+                process.WaitForExit();
+                exitCode = process.ExitCode;
+            }
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void ReportMissingElectronUi()
+    {
+        const string message =
+            "The Winshots Electron UI was not found. Extract the full winshots-1.0.0-win-x64.zip package or run with --winforms to open the legacy fallback.";
+
+        try
+        {
+            MessageBox.Show(message, "Winshots", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        catch
+        {
+            Console.Error.WriteLine(message);
+        }
+    }
+
+    private static bool ShouldWaitForElectron(string[] args)
+    {
+        return args.Any(static arg =>
+            string.Equals(arg, "--smoke", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(arg, "--screenshot", StringComparison.OrdinalIgnoreCase) ||
+            arg.StartsWith("--screenshot=", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool TryResolveElectronUi(out string electronExe, out string electronUi, out string workingDirectory)
+    {
+        foreach ((string ElectronExe, string ElectronUi, string WorkingDirectory) candidate in ElectronCandidates())
+        {
+            if (File.Exists(candidate.ElectronExe) && IsElectronAppPath(candidate.ElectronUi))
+            {
+                electronExe = candidate.ElectronExe;
+                electronUi = candidate.ElectronUi;
+                workingDirectory = candidate.WorkingDirectory;
+                return true;
+            }
+        }
+
+        electronExe = string.Empty;
+        electronUi = string.Empty;
+        workingDirectory = string.Empty;
+        return false;
+    }
+
+    private static bool IsElectronAppPath(string path)
+    {
+        return File.Exists(path) ||
+            File.Exists(Path.Combine(path, "package.json")) ||
+            File.Exists(Path.Combine(path, "index.js"));
+    }
+
+    private static IEnumerable<(string ElectronExe, string ElectronUi, string WorkingDirectory)> ElectronCandidates()
+    {
+        string? runtimeOverride = Environment.GetEnvironmentVariable("WINSHOTS_ELECTRON_RUNTIME");
+        string? uiOverride = Environment.GetEnvironmentVariable("WINSHOTS_ELECTRON_UI");
+        if (!string.IsNullOrWhiteSpace(runtimeOverride) && !string.IsNullOrWhiteSpace(uiOverride))
+        {
+            string electronExe = Path.Combine(Path.GetFullPath(runtimeOverride), "electron.exe");
+            string electronUi = Path.GetFullPath(uiOverride);
+            yield return (electronExe, electronUi, Path.GetDirectoryName(electronUi) ?? electronUi);
+        }
+
+        foreach (string packageRoot in PackageRootCandidates())
+        {
+            yield return (
+                Path.Combine(packageRoot, "electron-runtime", "electron.exe"),
+                Path.Combine(packageRoot, "electron-ui"),
+                packageRoot);
+        }
+
+        foreach (string sourceRoot in SourceRootCandidates())
+        {
+            yield return (
+                Path.Combine(sourceRoot, "node_modules", "electron", "dist", "electron.exe"),
+                Path.Combine(sourceRoot, "src", "Winshots.Electron", "main.cjs"),
+                sourceRoot);
+        }
+    }
+
+    private static IEnumerable<string> PackageRootCandidates()
+    {
+        string baseDirectory = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (Directory.GetParent(baseDirectory) is { } parent)
+        {
+            yield return parent.FullName;
+        }
+
+        string? exePath = Process.GetCurrentProcess().MainModule?.FileName;
+        if (string.IsNullOrWhiteSpace(exePath))
+        {
+            yield break;
+        }
+
+        string exeDirectory = Path.GetDirectoryName(exePath) ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(exeDirectory))
+        {
+            yield return exeDirectory;
+            yield return Path.Combine(exeDirectory, Path.GetFileNameWithoutExtension(exePath));
+        }
+    }
+
+    private static IEnumerable<string> SourceRootCandidates()
+    {
+        string? current = AppContext.BaseDirectory;
+        for (int i = 0; !string.IsNullOrWhiteSpace(current) && i < 8; i++)
+        {
+            if (File.Exists(Path.Combine(current, "package.json")) &&
+                File.Exists(Path.Combine(current, "src", "Winshots.Electron", "main.cjs")))
+            {
+                yield return current;
+            }
+
+            current = Directory.GetParent(current)?.FullName;
+        }
     }
 }

@@ -155,8 +155,8 @@ $releaseNotes = @"
 
 - Includes the Winshots Windows app and the Winshots MCP server.
 - Includes the Codex plugin files at version $Version.
-- Download $packageName.exe for the standalone app executable.
-- Download $packageName.zip for the full installer package with MCP and Codex plugin files.
+- Download $packageName.zip for the full Electron UI installer package with MCP and Codex plugin files.
+- Download $packageName.exe as a launcher executable when the full $packageName folder is beside it.
 - Run install.ps1 from the extracted archive to install under %LOCALAPPDATA%\Programs\Winshots.
 - Captures and sessions stay local under the user's Documents folder unless the user shares them explicitly.
 "@
