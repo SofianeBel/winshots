@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.ComponentModel;
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -9,6 +10,7 @@ using Winshots.App.Capture;
 using Winshots.App.Windows;
 
 var builder = Host.CreateApplicationBuilder(args);
+builder.Logging.ClearProviders();
 builder.Logging.AddConsole(options =>
 {
     options.LogToStandardErrorThreshold = LogLevel.Trace;
@@ -31,6 +33,26 @@ public static class WinshotsTools
         WriteIndented = true
     };
 
+    [McpServerTool, Description("List visible top-level Windows windows that Winshots can capture, optionally filtered by title or process name.")]
+    public static string ListWindows(
+        [Description("Optional case-insensitive title substring, for example YouTube, Twitter, Discord, or Steam.")] string? titleContains = null,
+        [Description("Optional case-insensitive process name substring, with or without .exe.")] string? processName = null,
+        [Description("Maximum number of windows to return.")] int maxCount = 25)
+    {
+        IReadOnlyList<WindowSnapshot> windows = FindCapturableWindows(titleContains, processName);
+        IntPtr foreground = NativeMethods.GetForegroundWindow();
+
+        return JsonSerializer.Serialize(windows.Take(Math.Clamp(maxCount, 1, 100)).Select(window => new
+        {
+            WindowHandle = FormatHandle(window.Handle),
+            WindowTitle = window.Title,
+            window.ProcessName,
+            window.ProcessId,
+            window.Bounds,
+            IsForeground = window.Handle == foreground
+        }), JsonOptions);
+    }
+
     [McpServerTool, Description("Capture the current Windows foreground window and return local screenshot/context artifact paths plus a text preview.")]
     public static string CaptureActiveWindow(
         [Description("Optional capture root. Defaults to the user's Documents\\Winshots\\captures folder.")] string? outputRoot = null,
@@ -52,20 +74,50 @@ public static class WinshotsTools
         CaptureResult result = workflow.CaptureWindow(hwnd, "mcp");
         string context = File.Exists(result.TextPath) ? File.ReadAllText(result.TextPath) : string.Empty;
 
-        return JsonSerializer.Serialize(new
+        return SerializeCaptureResult(result, context, maxPreviewCharacters);
+    }
+
+    [McpServerTool, Description("Capture a specific visible Windows window selected by handle, title substring, or process name. Use list_windows first when possible.")]
+    public static string CaptureWindow(
+        [Description("Window handle returned by list_windows, for example 0x00123456.")] string? windowHandle = null,
+        [Description("Optional case-insensitive title substring to select a window, for example YouTube or Steam.")] string? titleContains = null,
+        [Description("Optional case-insensitive process name substring, with or without .exe.")] string? processName = null,
+        [Description("Optional capture root. Defaults to the user's Documents\\Winshots\\captures folder.")] string? outputRoot = null,
+        [Description("Delay before capture in milliseconds. Useful when waiting for a target page or app to settle.")] int delayMs = 250,
+        [Description("Try to restore and foreground the target window before capturing it.")] bool activateWindow = true,
+        [Description("Maximum number of context preview characters to include in the tool response.")] int maxPreviewCharacters = 6_000)
+    {
+        WindowSelection selection = ResolveWindowTarget(windowHandle, titleContains, processName);
+
+        if (delayMs > 0)
         {
-            result.Metadata.Id,
-            result.Metadata.TimestampLocal,
-            result.Metadata.WindowTitle,
-            result.Metadata.ProcessName,
-            result.Metadata.Bounds,
-            result.Metadata.Metrics,
-            result.DirectoryPath,
-            result.ScreenshotPath,
-            result.TextPath,
-            result.MetadataPath,
-            ContextPreview = Truncate(context, Math.Clamp(maxPreviewCharacters, 1_000, 50_000))
-        }, JsonOptions);
+            Thread.Sleep(delayMs);
+        }
+
+        bool activationSucceeded = false;
+        if (activateWindow)
+        {
+            activationSucceeded = TryActivateWindow(selection.Window.Handle);
+            Thread.Sleep(150);
+        }
+
+        var workflow = new CaptureWorkflow(ResolveRoot(outputRoot));
+        CaptureResult result = workflow.CaptureWindow(selection.Window.Handle, "mcp-targeted");
+        string context = File.Exists(result.TextPath) ? File.ReadAllText(result.TextPath) : string.Empty;
+
+        return SerializeCaptureResult(result, context, maxPreviewCharacters, new
+        {
+            RequestedWindowHandle = windowHandle,
+            RequestedTitleContains = titleContains,
+            RequestedProcessName = processName,
+            SelectedWindowHandle = FormatHandle(selection.Window.Handle),
+            SelectedWindowTitle = selection.Window.Title,
+            selection.Window.ProcessName,
+            selection.Window.ProcessId,
+            selection.MatchCount,
+            ActivationAttempted = activateWindow,
+            ActivationSucceeded = activationSucceeded
+        });
     }
 
     [McpServerTool, Description("List recent local Winshots captures.")]
@@ -122,11 +174,26 @@ public static class WinshotsTools
         [Description("Milliseconds between frame captures. Clamped between 250 and 60000.")] int intervalMs = 1000,
         [Description("Maximum session duration in seconds. Clamped between 1 and 3600.")] int maxDurationSeconds = 60,
         [Description("Try to create a video.mp4 with ffmpeg when the session completes.")] bool includeVideo = true,
-        [Description("Delay before starting in milliseconds. Useful when the user needs time to focus another window.")] int delayMs = 250)
+        [Description("Delay before starting in milliseconds. Useful when the user needs time to focus another window.")] int delayMs = 250,
+        [Description("Optional window handle returned by list_windows. When omitted, the foreground window is captured each frame.")] string? windowHandle = null,
+        [Description("Optional case-insensitive title substring for the visual session target.")] string? titleContains = null,
+        [Description("Optional case-insensitive process name substring for the visual session target.")] string? processName = null,
+        [Description("Try to restore and foreground the target window before the visual session starts.")] bool activateWindow = true)
     {
         if (delayMs > 0)
         {
             Thread.Sleep(delayMs);
+        }
+
+        WindowSelection? selection = HasWindowSelector(windowHandle, titleContains, processName)
+            ? ResolveWindowTarget(windowHandle, titleContains, processName)
+            : null;
+
+        bool activationSucceeded = false;
+        if (selection is not null && activateWindow)
+        {
+            activationSucceeded = TryActivateWindow(selection.Window.Handle);
+            Thread.Sleep(150);
         }
 
         var recorder = new VisualSessionRecorder(new VisualSessionOptions
@@ -142,7 +209,9 @@ public static class WinshotsTools
             throw new InvalidOperationException("A visual session with the same id already exists.");
         }
 
-        recorder.Start(NativeMethods.GetForegroundWindow);
+        recorder.Start(selection is null
+            ? NativeMethods.GetForegroundWindow
+            : () => selection.Window.Handle);
 
         return JsonSerializer.Serialize(new
         {
@@ -153,7 +222,17 @@ public static class WinshotsTools
             recorder.Manifest.ContextPath,
             recorder.Manifest.IntervalMs,
             recorder.Manifest.MaxDurationSeconds,
-            recorder.Manifest.VideoRequested
+            recorder.Manifest.VideoRequested,
+            Target = selection is null ? null : new
+            {
+                SelectedWindowHandle = FormatHandle(selection.Window.Handle),
+                SelectedWindowTitle = selection.Window.Title,
+                selection.Window.ProcessName,
+                selection.Window.ProcessId,
+                selection.MatchCount,
+                ActivationAttempted = activateWindow,
+                ActivationSucceeded = activationSucceeded
+            }
         }, JsonOptions);
     }
 
@@ -237,8 +316,120 @@ public static class WinshotsTools
         return directory;
     }
 
+    private static IReadOnlyList<WindowSnapshot> FindCapturableWindows(string? titleContains, string? processName)
+    {
+        IntPtr foreground = NativeMethods.GetForegroundWindow();
+
+        return NativeMethods.EnumerateCapturableWindows()
+            .Where(window => MatchesTitle(window, titleContains) && MatchesProcess(window, processName))
+            .OrderByDescending(window => window.Handle == foreground)
+            .ThenBy(window => window.ProcessName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(window => window.Title, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static WindowSelection ResolveWindowTarget(string? windowHandle, string? titleContains, string? processName)
+    {
+        if (!HasWindowSelector(windowHandle, titleContains, processName))
+        {
+            throw new ArgumentException("Provide windowHandle, titleContains, or processName to select a target window.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(windowHandle))
+        {
+            IntPtr hwnd = ParseWindowHandle(windowHandle);
+            if (!NativeMethods.IsUsableCaptureTarget(hwnd))
+            {
+                throw new InvalidOperationException($"Window handle {windowHandle} is not currently capturable.");
+            }
+
+            WindowSnapshot window = NativeMethods.GetWindowSnapshot(hwnd);
+            if (!MatchesTitle(window, titleContains) || !MatchesProcess(window, processName))
+            {
+                throw new InvalidOperationException($"Window handle {windowHandle} does not match the supplied title/process filters.");
+            }
+
+            return new WindowSelection(window, 1);
+        }
+
+        IReadOnlyList<WindowSnapshot> matches = FindCapturableWindows(titleContains, processName);
+        if (matches.Count == 0)
+        {
+            throw new InvalidOperationException("No capturable window matched the supplied title/process filters.");
+        }
+
+        return new WindowSelection(matches[0], matches.Count);
+    }
+
+    private static bool HasWindowSelector(string? windowHandle, string? titleContains, string? processName)
+    {
+        return !string.IsNullOrWhiteSpace(windowHandle) ||
+            !string.IsNullOrWhiteSpace(titleContains) ||
+            !string.IsNullOrWhiteSpace(processName);
+    }
+
+    private static bool MatchesTitle(WindowSnapshot window, string? titleContains)
+    {
+        return string.IsNullOrWhiteSpace(titleContains) ||
+            window.Title.Contains(titleContains.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool MatchesProcess(WindowSnapshot window, string? processName)
+    {
+        if (string.IsNullOrWhiteSpace(processName))
+        {
+            return true;
+        }
+
+        string expected = Path.GetFileNameWithoutExtension(processName.Trim());
+        return window.ProcessName.Equals(expected, StringComparison.OrdinalIgnoreCase) ||
+            window.ProcessName.Contains(expected, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IntPtr ParseWindowHandle(string windowHandle)
+    {
+        string value = windowHandle.Trim();
+        long parsed = value.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+            ? long.Parse(value[2..], NumberStyles.HexNumber, CultureInfo.InvariantCulture)
+            : long.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
+
+        return new IntPtr(parsed);
+    }
+
+    private static bool TryActivateWindow(IntPtr hwnd)
+    {
+        _ = NativeMethods.ShowWindow(hwnd, NativeMethods.SwRestore);
+        return NativeMethods.SetForegroundWindow(hwnd);
+    }
+
+    private static string SerializeCaptureResult(CaptureResult result, string context, int maxPreviewCharacters, object? target = null)
+    {
+        return JsonSerializer.Serialize(new
+        {
+            result.Metadata.Id,
+            result.Metadata.TimestampLocal,
+            result.Metadata.WindowTitle,
+            result.Metadata.ProcessName,
+            result.Metadata.Bounds,
+            result.Metadata.Metrics,
+            result.DirectoryPath,
+            result.ScreenshotPath,
+            result.TextPath,
+            result.MetadataPath,
+            Target = target,
+            ContextPreview = Truncate(context, Math.Clamp(maxPreviewCharacters, 1_000, 50_000))
+        }, JsonOptions);
+    }
+
+    private static string FormatHandle(IntPtr hwnd)
+    {
+        return $"0x{hwnd.ToInt64():X}";
+    }
+
     private static string Truncate(string value, int maxCharacters)
     {
         return value.Length <= maxCharacters ? value : value[..maxCharacters] + "\n[truncated]";
     }
+
+    private sealed record WindowSelection(WindowSnapshot Window, int MatchCount);
 }

@@ -178,11 +178,11 @@ elseif ($Session) {
     Write-Host "MCP session OK: $($latest.FullName)"
 }
 else {
-    foreach ($toolName in @("capture_active_window", "list_recent_captures", "read_capture_context", "start_visual_session", "stop_visual_session", "list_visual_sessions", "read_visual_session_context")) {
+    foreach ($toolName in @("list_windows", "capture_window", "capture_active_window", "list_recent_captures", "read_capture_context", "start_visual_session", "stop_visual_session", "list_visual_sessions", "read_visual_session_context")) {
         if ($stdout -notmatch $toolName) {
             throw "MCP smoke did not expose $toolName."
         }
     }
 
-    Write-Host "MCP tools OK: capture, context, and visual session tools"
+    Write-Host "MCP tools OK: window targeting, capture, context, and visual session tools"
 }

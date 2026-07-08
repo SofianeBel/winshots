@@ -73,6 +73,17 @@ public static class NativeMethods
         return windows;
     }
 
+    public static IReadOnlyList<WindowSnapshot> EnumerateCapturableWindows()
+    {
+        return EnumerateTopLevelWindows()
+            .Where(IsUsableCaptureTarget)
+            .Select(GetWindowSnapshot)
+            .Where(static window =>
+                !string.IsNullOrWhiteSpace(window.Title) ||
+                !string.IsNullOrWhiteSpace(window.ProcessName))
+            .ToList();
+    }
+
     public static bool IsVisibleWindow(IntPtr hwnd)
     {
         return hwnd != IntPtr.Zero && IsWindowVisible(hwnd);
