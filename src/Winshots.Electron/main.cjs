@@ -30,6 +30,8 @@ let automationFinished = false;
 let screenshotInProgress = false;
 let screenshotAttempts = 0;
 let activeSession = null;
+let captureWatcher;
+let captureChangeTimer;
 const fileHashCache = new Map();
 
 function backgroundSettingsPath() {
@@ -639,6 +641,23 @@ function listCaptures(maxCount = 60) {
   };
 }
 
+function startCaptureWatcher() {
+  const root = resolveCaptureRoot();
+  fs.mkdirSync(root, { recursive: true });
+  captureWatcher = fs.watch(root, (_eventType, filename) => {
+    if (filename && filename !== "index.jsonl") {
+      return;
+    }
+
+    clearTimeout(captureChangeTimer);
+    captureChangeTimer = setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("captures:changed");
+      }
+    }, 150);
+  });
+}
+
 function findCapture(captureId) {
   const { root, captures } = listCaptures(100);
   const capture = captures.find((item) => item.id === captureId);
@@ -688,6 +707,8 @@ function createWindow() {
       preload: path.join(__dirname, "preload.cjs")
     }
   });
+
+  startCaptureWatcher();
 
   updateTray();
   mainWindow.on("close", (event) => {
@@ -1601,7 +1622,11 @@ ipcMain.on("renderer:ready", async () => {
 });
 
 app.whenReady().then(createWindow);
-app.on("before-quit", () => { isQuitting = true; });
+app.on("before-quit", () => {
+  isQuitting = true;
+  clearTimeout(captureChangeTimer);
+  captureWatcher?.close();
+});
 app.on("window-all-closed", () => {
   if (!readBackgroundSettings().enabled) {
     app.quit();

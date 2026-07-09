@@ -20,6 +20,11 @@ contextBridge.exposeInMainWorld("winshots", {
   setStartupEnabled: (enabled) => ipcRenderer.invoke("settings:startup:set", enabled),
   getBackgroundSettings: () => ipcRenderer.invoke("settings:background:get"),
   setBackgroundEnabled: (enabled) => ipcRenderer.invoke("settings:background:set", enabled),
+  onCapturesChanged: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on("captures:changed", listener);
+    return () => ipcRenderer.removeListener("captures:changed", listener);
+  },
   minimize: () => ipcRenderer.invoke("window:minimize"),
   maximize: () => ipcRenderer.invoke("window:maximize"),
   close: () => ipcRenderer.invoke("window:close"),

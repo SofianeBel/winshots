@@ -1115,6 +1115,13 @@ async function init() {
   applyStoredTheme();
   requestAnimationFrame(() => document.body.classList.add("theme-transitions"));
   bindEvents();
+  window.winshots.onCapturesChanged(async () => {
+    try {
+      await loadCaptures("Synced just now");
+    } catch (error) {
+      elements.sync.textContent = error.message || "Capture sync failed";
+    }
+  });
 
   try {
     await loadCaptures();
