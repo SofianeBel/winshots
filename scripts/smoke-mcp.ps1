@@ -100,7 +100,8 @@ $stderrTask = $process.StandardError.ReadToEndAsync()
 foreach ($message in $messages) {
     $process.StandardInput.WriteLine(($message | ConvertTo-Json -Depth 10 -Compress))
     $process.StandardInput.Flush()
-    if ($Session -and $message.params.name -eq "start_visual_session") {
+    if (($Session -and $message.params.name -eq "start_visual_session") -or
+        ($Capture -and $message.params.name -eq "capture_active_window")) {
         Start-Sleep -Milliseconds 2500
     }
     else {

@@ -35,6 +35,20 @@ public sealed class CaptureStorageTests : IDisposable
     }
 
     [Fact]
+    public void CreateCaptureDirectory_CreatesUniqueDirectories_WhenCalledConcurrently()
+    {
+        var storage = new CaptureStorage(_root);
+        DateTimeOffset timestamp = new(2026, 6, 20, 12, 0, 0, TimeSpan.Zero);
+        var paths = new System.Collections.Concurrent.ConcurrentBag<string>();
+
+        Parallel.For(0, 20, _ => paths.Add(storage.CreateCaptureDirectory(timestamp, "Notepad")));
+
+        Assert.Equal(20, paths.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.All(paths, path => Assert.True(Directory.Exists(path)));
+        Assert.Empty(Directory.EnumerateFiles(_root, "*.reserve"));
+    }
+
+    [Fact]
     public void ListRecent_ReturnsMetadataWrittenToDisk()
     {
         var storage = new CaptureStorage(_root);

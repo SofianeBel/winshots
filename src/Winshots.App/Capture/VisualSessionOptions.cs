@@ -6,7 +6,7 @@ public sealed record VisualSessionOptions
     public int IntervalMs { get; init; } = 1000;
     public int MaxDurationSeconds { get; init; } = 60;
     public bool IncludeVideo { get; init; } = true;
-    public int TextExtractionTimeoutMs { get; init; } = 1500;
+    public int TextExtractionTimeoutMs { get; init; } = 1000;
 
     public VisualSessionOptions Normalized()
     {

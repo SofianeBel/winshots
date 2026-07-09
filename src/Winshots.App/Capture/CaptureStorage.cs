@@ -26,15 +26,39 @@ public sealed class CaptureStorage
         string stamp = timestamp.LocalDateTime.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture);
         string safeTitle = SanitizeSegment(windowTitle);
         string basePath = Path.Combine(RootPath, $"{stamp}-{safeTitle}");
-        string path = basePath;
 
-        for (int i = 2; Directory.Exists(path); i++)
+        for (int i = 1; ; i++)
         {
-            path = $"{basePath}-{i}";
-        }
+            string path = i == 1 ? basePath : $"{basePath}-{i}";
+            string reservationPath = $"{path}.reserve";
 
-        Directory.CreateDirectory(path);
-        return path;
+            try
+            {
+                using var reservation = new FileStream(
+                    reservationPath,
+                    FileMode.CreateNew,
+                    FileAccess.Write,
+                    FileShare.None,
+                    bufferSize: 1,
+                    FileOptions.DeleteOnClose);
+
+                if (Directory.Exists(path))
+                {
+                    continue;
+                }
+
+                Directory.CreateDirectory(path);
+                return path;
+            }
+            catch (IOException) when (File.Exists(reservationPath) || Directory.Exists(path))
+            {
+                // Another Winshots process reserved this capture name.
+            }
+            catch (UnauthorizedAccessException) when (File.Exists(reservationPath) || Directory.Exists(path))
+            {
+                // Another Winshots process reserved this capture name.
+            }
+        }
     }
 
     public CaptureResult WriteCapture(
