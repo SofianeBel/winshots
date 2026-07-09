@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("winshots", {
   listCaptures: () => ipcRenderer.invoke("captures:list"),
   captureNow: (options) => ipcRenderer.invoke("app:capture", options),
+  toggleTimeline: (options) => ipcRenderer.invoke("timeline:toggle", options),
   startVisualSession: (options) => ipcRenderer.invoke("sessions:start", options),
   stopVisualSession: () => ipcRenderer.invoke("sessions:stop"),
   readCaptureContext: (captureId) => ipcRenderer.invoke("captures:context", captureId),
@@ -12,6 +13,9 @@ contextBridge.exposeInMainWorld("winshots", {
   copyCaptureContext: (captureId) => ipcRenderer.invoke("captures:copy-context", captureId),
   copyCaptureMetadata: (captureId) => ipcRenderer.invoke("captures:copy-metadata", captureId),
   trashCapture: (captureId) => ipcRenderer.invoke("captures:trash", captureId),
+  packageInfo: () => ipcRenderer.invoke("package:info"),
+  installPackage: () => ipcRenderer.invoke("package:install"),
+  openPackageFolder: () => ipcRenderer.invoke("package:open-folder"),
   minimize: () => ipcRenderer.invoke("window:minimize"),
   maximize: () => ipcRenderer.invoke("window:maximize"),
   close: () => ipcRenderer.invoke("window:close"),

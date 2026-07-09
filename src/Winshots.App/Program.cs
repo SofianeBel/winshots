@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Winshots.App.Host;
 using Winshots.App.Capture;
 using Winshots.App.Codex;
 using Winshots.App.UI;
@@ -30,14 +31,7 @@ internal static class Program
         }
         else
         {
-            if (TryRunElectronUi(args, out int electronExitCode))
-            {
-                Environment.ExitCode = electronExitCode;
-                return;
-            }
-
-            ReportMissingElectronUi();
-            Environment.ExitCode = 1;
+            Environment.ExitCode = RunElectronHost(args);
             return;
         }
 
@@ -265,9 +259,30 @@ internal static class Program
         return await recorder.WaitForCompletionAsync().ConfigureAwait(false);
     }
 
-    private static bool TryRunElectronUi(string[] args, out int exitCode)
+    private static int RunElectronHost(string[] args)
     {
-        exitCode = 0;
+        ApplicationConfiguration.Initialize();
+
+        using var mainForm = new MainForm();
+        _ = mainForm.Handle;
+
+        using var commandServer = new HostCommandServer(mainForm);
+        commandServer.Start();
+
+        if (!TryStartElectronUi(args, commandServer.PipeName, mainForm, out Process? electronProcess))
+        {
+            ReportMissingElectronUi();
+            return 1;
+        }
+
+        using var context = new ElectronHostApplicationContext(mainForm, electronProcess!, commandServer);
+        Application.Run(context);
+        return context.ExitCode;
+    }
+
+    private static bool TryStartElectronUi(string[] args, string? hostPipeName, MainForm? hostForm, out Process? process)
+    {
+        process = null;
         if (!TryResolveElectronUi(out string electronExe, out string electronUi, out string workingDirectory))
         {
             return false;
@@ -275,28 +290,35 @@ internal static class Program
 
         try
         {
-            using var process = new Process();
-            process.StartInfo.FileName = electronExe;
-            process.StartInfo.WorkingDirectory = workingDirectory;
-            process.StartInfo.UseShellExecute = false;
-            process.StartInfo.CreateNoWindow = true;
-            process.StartInfo.ArgumentList.Add(electronUi);
+            var electronProcess = new Process();
+            electronProcess.StartInfo.FileName = electronExe;
+            electronProcess.StartInfo.WorkingDirectory = workingDirectory;
+            electronProcess.StartInfo.UseShellExecute = false;
+            electronProcess.StartInfo.CreateNoWindow = true;
+            electronProcess.StartInfo.ArgumentList.Add(electronUi);
             foreach (string arg in args)
             {
-                process.StartInfo.ArgumentList.Add(arg);
+                electronProcess.StartInfo.ArgumentList.Add(arg);
             }
 
-            process.Start();
-            if (ShouldWaitForElectron(args))
+            if (!string.IsNullOrWhiteSpace(hostPipeName))
             {
-                process.WaitForExit();
-                exitCode = process.ExitCode;
+                electronProcess.StartInfo.Environment["WINSHOTS_HOST_PIPE"] = hostPipeName;
             }
+
+            hostForm?.ExcludeProcessPathPrefix(Path.GetDirectoryName(electronExe) ?? string.Empty);
+            hostForm?.PrimeCaptureTarget();
+
+            electronProcess.Start();
+            hostForm?.ExcludeProcess(electronProcess.Id);
+            process = electronProcess;
 
             return true;
         }
         catch
         {
+            process?.Dispose();
+            process = null;
             return false;
         }
     }
@@ -412,6 +434,92 @@ internal static class Program
             }
 
             current = Directory.GetParent(current)?.FullName;
+        }
+    }
+
+    private sealed class ElectronHostApplicationContext : ApplicationContext
+    {
+        private readonly MainForm _mainForm;
+        private readonly Process _electronProcess;
+        private readonly HostCommandServer _commandServer;
+        private bool _exiting;
+
+        public ElectronHostApplicationContext(MainForm mainForm, Process electronProcess, HostCommandServer commandServer)
+        {
+            _mainForm = mainForm;
+            _electronProcess = electronProcess;
+            _commandServer = commandServer;
+
+            _electronProcess.EnableRaisingEvents = true;
+            _electronProcess.Exited += (_, _) =>
+            {
+                ExitCode = _electronProcess.ExitCode;
+                ExitFromAnyThread();
+            };
+            _mainForm.FormClosed += (_, _) => ExitFromAnyThread();
+        }
+
+        public int ExitCode { get; private set; }
+
+        protected override void ExitThreadCore()
+        {
+            if (_exiting)
+            {
+                return;
+            }
+
+            _exiting = true;
+            _commandServer.Dispose();
+
+            try
+            {
+                if (!_electronProcess.HasExited)
+                {
+                    _electronProcess.Kill(entireProcessTree: true);
+                }
+            }
+            catch
+            {
+                // The Electron process may already be gone.
+            }
+
+            try
+            {
+                if (!_mainForm.IsDisposed)
+                {
+                    _mainForm.Dispose();
+                }
+            }
+            catch
+            {
+                // Shutdown should not be blocked by UI disposal errors.
+            }
+
+            _electronProcess.Dispose();
+            base.ExitThreadCore();
+        }
+
+        private void ExitFromAnyThread()
+        {
+            if (_exiting)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_mainForm.IsHandleCreated && !_mainForm.IsDisposed)
+                {
+                    _mainForm.BeginInvoke((Action)ExitThread);
+                    return;
+                }
+            }
+            catch
+            {
+                // Fall through to direct exit.
+            }
+
+            ExitThread();
         }
     }
 }

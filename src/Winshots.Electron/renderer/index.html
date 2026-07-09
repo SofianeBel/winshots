@@ -70,6 +70,7 @@
           <section class="sidebar-footer">
             <div class="footer-tools">
               <button class="icon-button" type="button" aria-label="Toggle theme" aria-pressed="false" data-theme-toggle data-icon="theme"></button>
+              <button class="icon-button" type="button" aria-label="Settings" data-settings-open data-icon="settings"></button>
             </div>
             <p><span class="status-dot"></span><span id="sync-status">Loading captures...</span></p>
           </section>
@@ -143,6 +144,37 @@
           <section class="inspector-body" id="inspector-body"></section>
         </aside>
       </div>
+    </div>
+
+    <div class="settings-modal" data-settings-modal hidden>
+      <button type="button" class="preview-backdrop" aria-label="Close settings" data-settings-close></button>
+      <section class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <header class="settings-head">
+          <div>
+            <h2 id="settings-title">Settings</h2>
+            <p data-settings-mode>Checking package...</p>
+          </div>
+          <button type="button" class="icon-button" aria-label="Close settings" data-settings-close data-icon="close"></button>
+        </header>
+        <div class="settings-body">
+          <section class="settings-section">
+            <h3>Package</h3>
+            <div class="settings-rows" data-settings-package></div>
+          </section>
+          <section class="settings-section">
+            <h3>Launcher</h3>
+            <p class="settings-copy" data-settings-launcher></p>
+          </section>
+          <section class="settings-section">
+            <h3>Local install</h3>
+            <p class="settings-copy" data-settings-install-copy></p>
+            <div class="settings-actions">
+              <button type="button" class="command-button primary" data-settings-action="install-local">Install locally</button>
+              <button type="button" class="command-button" data-settings-action="open-package">Open package folder</button>
+            </div>
+          </section>
+        </div>
+      </section>
     </div>
 
     <div class="preview-modal" data-preview-modal hidden>

@@ -889,10 +889,23 @@ textarea::placeholder {
   display: none;
 }
 
+.settings-modal[hidden] {
+  display: none;
+}
+
 .preview-modal {
   position: fixed;
   inset: 0;
   z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+}
+
+.settings-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 22;
   display: grid;
   place-items: center;
   padding: 28px;
@@ -918,7 +931,29 @@ textarea::placeholder {
   overflow: hidden;
 }
 
+.settings-dialog {
+  position: relative;
+  width: min(720px, 92vw);
+  max-height: 90vh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  border: 1px solid #3a414c;
+  border-radius: 8px;
+  background: #111418;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
 .preview-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-head {
   display: flex;
   align-items: start;
   justify-content: space-between;
@@ -932,9 +967,53 @@ textarea::placeholder {
   line-height: 22px;
 }
 
+.settings-head h2 {
+  font-size: 16px;
+  line-height: 22px;
+}
+
 .preview-head p {
   margin-top: 4px;
   color: var(--muted);
+}
+
+.settings-head p {
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.settings-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 18px;
+}
+
+.settings-section {
+  padding-bottom: 22px;
+}
+
+.settings-section h3 {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  margin-bottom: 12px;
+}
+
+.settings-rows {
+  display: grid;
+  gap: 4px;
+}
+
+.settings-copy {
+  color: #c6ccd5;
+  line-height: 1.45;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
 }
 
 .preview-stage {

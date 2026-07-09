@@ -36,6 +36,8 @@ public sealed class RecordingOverlayForm : Form
 
     protected override bool ShowWithoutActivation => true;
 
+    public string StatusText => _textLabel.Text;
+
     protected override CreateParams CreateParams
     {
         get

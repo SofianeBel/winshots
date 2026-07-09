@@ -7,6 +7,22 @@ using Winshots.App.Windows;
 
 namespace Winshots.App.UI;
 
+public sealed record HostCaptureCommandResult(
+    string? Id,
+    string? DirectoryPath,
+    string? ScreenshotPath,
+    string? TextPath,
+    string? MetadataPath,
+    bool? CodexPasteSuccess,
+    string? CodexPasteMessage,
+    string Message);
+
+public sealed record HostTimelineCommandResult(bool Running, string Message);
+
+public sealed record HostSessionCommandResult(bool Running, string? DirectoryPath, VisualSessionManifest? Manifest, string Message);
+
+public sealed record HostStatusCommandResult(bool SessionRunning, bool TimelineRunning, bool OverlayVisible, string OverlayText);
+
 public sealed class MainForm : Form
 {
     private const int CaptureHotkeyId = 100;
@@ -17,7 +33,8 @@ public sealed class MainForm : Form
     private readonly RecordingOverlayForm _overlay = new();
     private readonly System.Windows.Forms.Timer _targetPollTimer = new();
     private readonly System.Windows.Forms.Timer _timelineTimer = new();
-    private readonly int _ownProcessId = Environment.ProcessId;
+    private readonly HashSet<int> _excludedProcessIds = [Environment.ProcessId];
+    private readonly List<string> _excludedProcessPathPrefixes = [];
 
     private ShortcutSettings _settings = null!;
     private IntPtr _lastExternalWindow;
@@ -108,6 +125,70 @@ public sealed class MainForm : Form
         }
 
         base.Dispose(disposing);
+    }
+
+    public void ExcludeProcess(int processId)
+    {
+        if (processId > 0)
+        {
+            _excludedProcessIds.Add(processId);
+        }
+    }
+
+    public void ExcludeProcessPathPrefix(string pathPrefix)
+    {
+        if (string.IsNullOrWhiteSpace(pathPrefix))
+        {
+            return;
+        }
+
+        string normalized = Path.GetFullPath(pathPrefix).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!_excludedProcessPathPrefixes.Contains(normalized, StringComparer.OrdinalIgnoreCase))
+        {
+            _excludedProcessPathPrefixes.Add(normalized);
+        }
+    }
+
+    public void PrimeCaptureTarget()
+    {
+        UpdateLastExternalWindow();
+    }
+
+    public Task<HostCaptureCommandResult> CaptureForHostAsync(string reason, bool pasteToCodex)
+    {
+        return RunOnUiThreadAsync(() => CaptureFromCurrentContextAsync(
+            reason,
+            pasteToCodex,
+            preferLastExternalWindow: true,
+            showCodexFallbackDialog: false));
+    }
+
+    public Task<HostTimelineCommandResult> ToggleTimelineForHostAsync(int intervalMs)
+    {
+        return RunOnUiThreadAsync(() => ToggleTimeline(intervalMs));
+    }
+
+    public Task<HostSessionCommandResult> StartVisualSessionForHostAsync(int intervalMs, int durationSeconds)
+    {
+        return RunOnUiThreadAsync(() => StartVisualSession(intervalMs, durationSeconds, preferLastExternalWindow: true));
+    }
+
+    public Task<HostSessionCommandResult> StopVisualSessionForHostAsync()
+    {
+        return RunOnUiThreadAsync(async () =>
+        {
+            VisualSessionManifest? manifest = await StopVisualSessionAsync();
+            return new HostSessionCommandResult(false, manifest?.DirectoryPath, manifest, _statusLabel.Text);
+        });
+    }
+
+    public Task<HostStatusCommandResult> GetHostStatusAsync()
+    {
+        return RunOnUiThreadAsync(() => new HostStatusCommandResult(
+            _sessionRecorder?.IsRunning == true,
+            _timelineTimer.Enabled,
+            _overlay.Visible,
+            _overlay.Visible ? _overlay.StatusText : string.Empty));
     }
 
     private void BuildUi()
@@ -296,18 +377,22 @@ public sealed class MainForm : Form
         return menu;
     }
 
-    private async Task CaptureFromCurrentContextAsync(string reason, bool pasteToCodex = false)
+    private async Task<HostCaptureCommandResult> CaptureFromCurrentContextAsync(
+        string reason,
+        bool pasteToCodex = false,
+        bool preferLastExternalWindow = false,
+        bool showCodexFallbackDialog = true)
     {
         if (_isCapturing)
         {
-            return;
+            return new HostCaptureCommandResult(null, null, null, null, null, null, null, "Capture already running.");
         }
 
-        IntPtr hwnd = SelectCaptureTarget();
+        IntPtr hwnd = SelectCaptureTarget(preferLastExternalWindow);
         if (!NativeMethods.IsUsableCaptureTarget(hwnd))
         {
             SetStatus("No capture target. Focus another window, then use the hotkey or Capture now.");
-            return;
+            return new HostCaptureCommandResult(null, null, null, null, null, null, null, _statusLabel.Text);
         }
 
         try
@@ -319,19 +404,31 @@ public sealed class MainForm : Form
 
             CaptureResult result = await Task.Run(() => _workflow.CaptureWindow(hwnd, reason));
             AddCapture(result, select: true);
+            CodexPasteResult? paste = null;
             if (pasteToCodex)
             {
-                PasteCaptureToCodex(result);
+                paste = PasteCaptureToCodex(result, showCodexFallbackDialog);
             }
             else
             {
                 SetStatus($"Captured {result.Metadata.WindowTitle}{FormatMetrics(result.Metadata.Metrics)}");
             }
+
+            return new HostCaptureCommandResult(
+                result.Metadata.Id,
+                result.DirectoryPath,
+                result.ScreenshotPath,
+                result.TextPath,
+                result.MetadataPath,
+                paste?.Success,
+                paste?.Message,
+                _statusLabel.Text);
         }
         catch (Exception ex)
         {
             SetStatus($"Capture failed: {ex.Message}");
             _contextBox.Text = ex.ToString();
+            return new HostCaptureCommandResult(null, null, null, null, null, null, null, _statusLabel.Text);
         }
         finally
         {
@@ -341,10 +438,15 @@ public sealed class MainForm : Form
         }
     }
 
-    private IntPtr SelectCaptureTarget()
+    private IntPtr SelectCaptureTarget(bool preferLastExternalWindow = false)
     {
+        if (preferLastExternalWindow && IsUsableNonExcludedTarget(_lastExternalWindow))
+        {
+            return _lastExternalWindow;
+        }
+
         IntPtr foreground = NativeMethods.GetForegroundWindow();
-        if (NativeMethods.GetProcessId(foreground) != _ownProcessId)
+        if (IsUsableNonExcludedTarget(foreground))
         {
             return foreground;
         }
@@ -355,7 +457,7 @@ public sealed class MainForm : Form
     private void UpdateLastExternalWindow()
     {
         IntPtr hwnd = NativeMethods.GetForegroundWindow();
-        if (NativeMethods.GetProcessId(hwnd) == _ownProcessId || !NativeMethods.IsUsableCaptureTarget(hwnd))
+        if (!IsUsableNonExcludedTarget(hwnd))
         {
             return;
         }
@@ -365,7 +467,43 @@ public sealed class MainForm : Form
         _targetLabel.Text = string.IsNullOrWhiteSpace(title) ? "Target: untitled window" : $"Target: {title}";
     }
 
-    private void ToggleTimeline()
+    private bool IsUsableNonExcludedTarget(IntPtr hwnd)
+    {
+        return NativeMethods.IsUsableCaptureTarget(hwnd) &&
+            !IsExcludedCaptureProcess(NativeMethods.GetProcessId(hwnd));
+    }
+
+    private bool IsExcludedCaptureProcess(int processId)
+    {
+        if (processId <= 0 || _excludedProcessIds.Contains(processId))
+        {
+            return true;
+        }
+
+        if (_excludedProcessPathPrefixes.Count == 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            using Process process = Process.GetProcessById(processId);
+            string? path = process.MainModule?.FileName;
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return false;
+            }
+
+            string fullPath = Path.GetFullPath(path);
+            return _excludedProcessPathPrefixes.Any(prefix => fullPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private HostTimelineCommandResult ToggleTimeline(int? intervalMs = null)
     {
         if (_timelineTimer.Enabled)
         {
@@ -373,7 +511,13 @@ public sealed class MainForm : Form
             _timelineButton.Text = "Start timeline";
             SetStatus("Periodic capture stopped.");
             UpdateOverlayState();
-            return;
+            return new HostTimelineCommandResult(false, _statusLabel.Text);
+        }
+
+        if (intervalMs is not null)
+        {
+            int seconds = Math.Clamp(intervalMs.Value / 1000, Decimal.ToInt32(_intervalInput.Minimum), Decimal.ToInt32(_intervalInput.Maximum));
+            _intervalInput.Value = seconds;
         }
 
         _timelineTimer.Interval = Decimal.ToInt32(_intervalInput.Value) * 1000;
@@ -381,6 +525,7 @@ public sealed class MainForm : Form
         _timelineButton.Text = "Stop timeline";
         SetStatus($"Periodic capture every {_intervalInput.Value} seconds.");
         UpdateOverlayState();
+        return new HostTimelineCommandResult(true, _statusLabel.Text);
     }
 
     private void UpdateOverlayState()
@@ -414,27 +559,47 @@ public sealed class MainForm : Form
             return;
         }
 
+        StartVisualSession();
+    }
+
+    private HostSessionCommandResult StartVisualSession(
+        int? intervalMs = null,
+        int maxDurationSeconds = 300,
+        bool preferLastExternalWindow = false)
+    {
+        if (_sessionRecorder?.IsRunning == true)
+        {
+            return new HostSessionCommandResult(true, _sessionRecorder.DirectoryPath, null, _statusLabel.Text);
+        }
+
+        if (intervalMs is not null)
+        {
+            int seconds = Math.Clamp(intervalMs.Value / 1000, Decimal.ToInt32(_intervalInput.Minimum), Decimal.ToInt32(_intervalInput.Maximum));
+            _intervalInput.Value = seconds;
+        }
+
         var recorder = new VisualSessionRecorder(new VisualSessionOptions
         {
             IntervalMs = Decimal.ToInt32(_intervalInput.Value) * 1000,
-            MaxDurationSeconds = 300,
+            MaxDurationSeconds = Math.Clamp(maxDurationSeconds, 1, 3600),
             IncludeVideo = true
         });
 
         _sessionRecorder = recorder;
-        recorder.Start(SelectCaptureTarget);
+        recorder.Start(() => SelectCaptureTarget(preferLastExternalWindow));
         _sessionButton.Text = "Stop session";
         SetStatus($"Visual session recording: {recorder.DirectoryPath}");
         UpdateOverlayState();
         _ = WatchVisualSessionAsync(recorder);
+        return new HostSessionCommandResult(true, recorder.DirectoryPath, null, _statusLabel.Text);
     }
 
-    private async Task StopVisualSessionAsync()
+    private async Task<VisualSessionManifest?> StopVisualSessionAsync()
     {
         VisualSessionRecorder? recorder = _sessionRecorder;
         if (recorder is null)
         {
-            return;
+            return null;
         }
 
         _sessionButton.Enabled = false;
@@ -442,6 +607,7 @@ public sealed class MainForm : Form
 
         VisualSessionManifest manifest = await recorder.StopAsync();
         FinishVisualSessionUi(recorder, manifest);
+        return manifest;
     }
 
     private async Task WatchVisualSessionAsync(VisualSessionRecorder recorder)
@@ -646,21 +812,25 @@ public sealed class MainForm : Form
         return true;
     }
 
-    private void PasteCaptureToCodex(CaptureResult result)
+    private CodexPasteResult PasteCaptureToCodex(CaptureResult result, bool showFallbackDialog = true)
     {
         try
         {
             CodexPasteResult paste = CodexChatPaster.TryPasteCapture(result);
             string prefix = $"Captured {result.Metadata.WindowTitle}{FormatMetrics(result.Metadata.Metrics)}.";
             SetStatus(paste.Success ? $"{prefix} {paste.Message}" : $"{prefix} {paste.Message}");
-            if (!paste.Success)
+            if (!paste.Success && showFallbackDialog)
             {
                 MessageBox.Show(this, paste.Message, "Capture saved", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
+
+            return paste;
         }
         catch (Exception ex)
         {
-            SetStatus($"Captured {result.Metadata.WindowTitle}, but Codex paste failed: {ex.Message}");
+            var paste = new CodexPasteResult(false, $"Codex paste failed: {ex.Message}");
+            SetStatus($"Captured {result.Metadata.WindowTitle}, but {paste.Message}");
+            return paste;
         }
     }
 
@@ -693,5 +863,56 @@ public sealed class MainForm : Form
         Show();
         WindowState = FormWindowState.Normal;
         Activate();
+    }
+
+    private Task<T> RunOnUiThreadAsync<T>(Func<T> action)
+    {
+        return RunOnUiThreadAsync(() => Task.FromResult(action()));
+    }
+
+    private Task<T> RunOnUiThreadAsync<T>(Func<Task<T>> action)
+    {
+        var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        void Run()
+        {
+            _ = RunAsync();
+
+            async Task RunAsync()
+            {
+                try
+                {
+                    completion.TrySetResult(await action());
+                }
+                catch (Exception ex)
+                {
+                    completion.TrySetException(ex);
+                }
+            }
+        }
+
+        if (IsDisposed || Disposing || !IsHandleCreated)
+        {
+            completion.SetException(new ObjectDisposedException(nameof(MainForm)));
+            return completion.Task;
+        }
+
+        if (InvokeRequired)
+        {
+            try
+            {
+                BeginInvoke((Action)Run);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException)
+            {
+                completion.TrySetException(ex);
+            }
+        }
+        else
+        {
+            Run();
+        }
+
+        return completion.Task;
     }
 }

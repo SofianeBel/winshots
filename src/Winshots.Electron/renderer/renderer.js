@@ -5,6 +5,7 @@ const iconPaths = {
   context: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/>',
   image: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="m21 16-5-5L5 19"/>',
   theme: '<path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/><circle cx="12" cy="12" r="4"/>',
+  settings: '<path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.05.05a2.1 2.1 0 0 1-2.97 2.97l-.05-.05a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.08 1.65V21a2.1 2.1 0 0 1-4.2 0v-.08a1.8 1.8 0 0 0-1.08-1.65 1.8 1.8 0 0 0-1.98.36l-.05.05a2.1 2.1 0 0 1-2.97-2.97l.05-.05a1.8 1.8 0 0 0 .36-1.98 1.8 1.8 0 0 0-1.65-1.08H3a2.1 2.1 0 0 1 0-4.2h.08a1.8 1.8 0 0 0 1.65-1.08 1.8 1.8 0 0 0-.36-1.98l-.05-.05a2.1 2.1 0 0 1 2.97-2.97l.05.05a1.8 1.8 0 0 0 1.98.36h.02a1.8 1.8 0 0 0 1.06-1.65V3a2.1 2.1 0 0 1 4.2 0v.08a1.8 1.8 0 0 0 1.08 1.65 1.8 1.8 0 0 0 1.98-.36l.05-.05a2.1 2.1 0 0 1 2.97 2.97l-.05.05a1.8 1.8 0 0 0-.36 1.98v.02a1.8 1.8 0 0 0 1.65 1.06H21a2.1 2.1 0 0 1 0 4.2h-.08a1.8 1.8 0 0 0-1.52 1.08Z"/>',
   list: '<path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/>',
   grid: '<rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><rect x="14" y="14" width="6" height="6"/>',
   folder: '<path d="M3 6h6l2 2h10v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6Z"/>',
@@ -27,8 +28,12 @@ const state = {
   root: "",
   source: "",
   captureBusy: false,
-  timelineTimer: null,
-  sessionRunning: false
+  timelineRunning: false,
+  sessionRunning: false,
+  settingsOpen: false,
+  packageInfo: null,
+  packageInstallBusy: false,
+  inspectorRequestId: 0
 };
 
 const elements = {
@@ -45,6 +50,12 @@ const elements = {
   autoScroll: document.querySelector("[data-auto-scroll]"),
   sidebarToggle: document.querySelector("[data-sidebar-toggle]"),
   themeToggle: document.querySelector("[data-theme-toggle]"),
+  settingsModal: document.querySelector("[data-settings-modal]"),
+  settingsMode: document.querySelector("[data-settings-mode]"),
+  settingsPackage: document.querySelector("[data-settings-package]"),
+  settingsLauncher: document.querySelector("[data-settings-launcher]"),
+  settingsInstallCopy: document.querySelector("[data-settings-install-copy]"),
+  settingsInstallButton: document.querySelector('[data-settings-action="install-local"]'),
   previewModal: document.querySelector("[data-preview-modal]"),
   previewTitle: document.querySelector("#preview-title"),
   previewMeta: document.querySelector("#preview-meta"),
@@ -80,8 +91,8 @@ function setCaptureBusy(busy) {
   state.captureBusy = busy;
   elements.captureCommand.disabled = busy;
   elements.captureCodexCommand.disabled = busy;
-  elements.intervalInput.disabled = busy || state.timelineTimer !== null || state.sessionRunning;
-  elements.timelineCommand.disabled = busy && state.timelineTimer === null;
+  elements.intervalInput.disabled = busy || state.timelineRunning || state.sessionRunning;
+  elements.timelineCommand.disabled = busy && !state.timelineRunning;
   elements.sessionCommand.disabled = busy && !state.sessionRunning;
 }
 
@@ -102,15 +113,15 @@ async function loadCaptures(statusText) {
 
 function commandMessage(response, fallback) {
   const command = response?.command;
-  if (command?.CodexPasteMessage) {
-    return command.CodexPasteMessage;
+  if (command?.CodexPasteMessage || command?.codexPasteMessage) {
+    return command.CodexPasteMessage || command.codexPasteMessage;
   }
 
-  if (command?.DirectoryPath) {
+  if (command?.DirectoryPath || command?.directoryPath) {
     return fallback;
   }
 
-  return fallback;
+  return command?.Message || command?.message || fallback;
 }
 
 async function runAppCapture({ pasteToCodex = false, reason = "electron", status = "Capturing..." } = {}) {
@@ -123,8 +134,7 @@ async function runAppCapture({ pasteToCodex = false, reason = "electron", status
     elements.sync.textContent = status;
     const response = await window.winshots.captureNow({
       pasteToCodex,
-      reason,
-      delayMs: 350
+      reason
     });
     applyCaptureResponse(response);
     elements.sync.textContent = commandMessage(response, pasteToCodex ? "Captured for Codex" : "Capture saved");
@@ -135,27 +145,25 @@ async function runAppCapture({ pasteToCodex = false, reason = "electron", status
   }
 }
 
-function toggleTimeline() {
-  if (state.timelineTimer) {
-    window.clearInterval(state.timelineTimer);
-    state.timelineTimer = null;
-    elements.timelineCommand.classList.remove("active");
-    elements.timelineCommand.setAttribute("aria-pressed", "false");
-    elements.timelineCommand.querySelector("span:last-child").textContent = "Timeline";
-    elements.sync.textContent = "Timeline stopped";
+async function toggleTimeline() {
+  try {
+    elements.timelineCommand.disabled = true;
+    elements.sync.textContent = state.timelineRunning ? "Stopping timeline..." : "Starting timeline...";
+    const response = await window.winshots.toggleTimeline({
+      intervalMs: intervalMs()
+    });
+    state.timelineRunning = Boolean(response?.Running ?? response?.running);
+    elements.timelineCommand.classList.toggle("active", state.timelineRunning);
+    elements.timelineCommand.setAttribute("aria-pressed", String(state.timelineRunning));
+    elements.timelineCommand.querySelector("span:last-child").textContent = state.timelineRunning ? "Stop timeline" : "Timeline";
+    elements.sync.textContent = response?.Message || response?.message || (state.timelineRunning ? "Timeline running" : "Timeline stopped");
+    await loadCaptures(elements.sync.textContent);
+  } catch (error) {
+    elements.sync.textContent = error.message || "Timeline failed";
+  } finally {
+    elements.timelineCommand.disabled = false;
     setCaptureBusy(state.captureBusy);
-    return;
   }
-
-  state.timelineTimer = window.setInterval(() => {
-    runAppCapture({ reason: "electron-timeline", status: "Timeline capture..." });
-  }, intervalMs());
-  elements.timelineCommand.classList.add("active");
-  elements.timelineCommand.setAttribute("aria-pressed", "true");
-  elements.timelineCommand.querySelector("span:last-child").textContent = "Stop timeline";
-  elements.sync.textContent = "Timeline running";
-  setCaptureBusy(state.captureBusy);
-  runAppCapture({ reason: "electron-timeline", status: "Timeline capture..." });
 }
 
 async function toggleSession() {
@@ -450,6 +458,7 @@ function renderRecent() {
 }
 
 async function renderInspector() {
+  const requestId = ++state.inspectorRequestId;
   const capture = state.captures.find((item) => item.id === state.selectedId);
   if (!capture) {
     elements.inspector.innerHTML = `<p class="muted">Select a capture to inspect local metadata.</p>`;
@@ -457,11 +466,28 @@ async function renderInspector() {
   }
 
   let context = capture.contextPreview || "";
-  try {
-    const response = await window.winshots.readCaptureContext(capture.id);
-    context = response.context || context;
-  } catch {
-    context = context || "Context text is not available for this capture.";
+  if (!capture.detailsLoaded) {
+    try {
+      const response = await window.winshots.readCaptureContext(capture.id);
+      if (requestId !== state.inspectorRequestId || state.selectedId !== capture.id) {
+        return;
+      }
+
+      capture.contextPreview = response.context || context;
+      capture.hash = response.hash || "";
+      capture.detailsLoaded = true;
+      context = capture.contextPreview;
+    } catch {
+      if (requestId !== state.inspectorRequestId || state.selectedId !== capture.id) {
+        return;
+      }
+
+      context = context || "Context text is not available for this capture.";
+    }
+  }
+
+  if (requestId !== state.inspectorRequestId || state.selectedId !== capture.id) {
+    return;
   }
 
   const labels = labelsFor(capture)
@@ -592,6 +618,99 @@ function setViewMode(mode) {
   });
   elements.sync.textContent = state.viewMode === "grid" ? "Grid view" : "List view";
   renderRows();
+}
+
+function modeLabel(mode) {
+  if (mode === "installed") return "Installed";
+  if (mode === "portable") return "Portable package";
+  return "Source checkout";
+}
+
+function installCopy(info) {
+  if (!info) return "Package status is loading.";
+  if (info.mode === "installed") {
+    return "This copy is already installed under the local user profile.";
+  }
+  if (info.canInstall) {
+    return info.installTargetReady
+      ? "Install locally refreshes the copy under the user profile and Start Menu shortcuts. Codex plugin setup stays separate."
+      : "Install locally copies this package to the user profile and creates Start Menu shortcuts. Codex plugin setup stays separate.";
+  }
+
+  return "Build or extract the release zip to enable local install.";
+}
+
+function launcherCopy(info) {
+  if (!info) return "Package status is loading.";
+  const starts = (info.starts || []).join(", ");
+  return `The launcher starts ${starts}. Use the release setup executable for installation, or run this portable package directly from its folder.`;
+}
+
+function renderSettings() {
+  const info = state.packageInfo;
+  const mode = modeLabel(info?.mode);
+  elements.settingsMode.textContent = info ? mode : "Checking package...";
+  elements.settingsPackage.innerHTML = info
+    ? [
+        infoRow("Mode", mode),
+        infoRow("Package", info.packageRoot),
+        infoRow("Install target", info.installRoot),
+        infoRow("Installed copy", info.installTargetReady ? "Present" : "Missing"),
+        infoRow("Electron runtime", info.hasElectronRuntime ? "Available" : "Missing"),
+        infoRow("MCP server", info.hasMcpServer ? "Available" : "Missing")
+      ].join("")
+    : `<p class="muted">Checking package...</p>`;
+  elements.settingsLauncher.textContent = launcherCopy(info);
+  elements.settingsInstallCopy.textContent = installCopy(info);
+  elements.settingsInstallButton.disabled = state.packageInstallBusy || !info?.canInstall;
+  elements.settingsInstallButton.textContent = state.packageInstallBusy ? "Installing..." : "Install locally";
+}
+
+async function loadPackageInfo() {
+  try {
+    state.packageInfo = await window.winshots.packageInfo();
+  } catch (error) {
+    state.packageInfo = null;
+    elements.sync.textContent = error.message || "Package check failed";
+  }
+
+  renderSettings();
+}
+
+function openSettings() {
+  state.settingsOpen = true;
+  elements.settingsModal.hidden = false;
+  renderSettings();
+  loadPackageInfo();
+  elements.settingsModal.querySelector("[data-settings-close]")?.focus();
+}
+
+function closeSettings() {
+  state.settingsOpen = false;
+  elements.settingsModal.hidden = true;
+}
+
+async function runSettingsAction(action) {
+  if (action === "open-package") {
+    await window.winshots.openPackageFolder();
+    return "Opened package folder";
+  }
+
+  if (action === "install-local") {
+    if (!window.confirm("Install Winshots to the local user profile? Codex plugin setup stays separate so a locked Codex cache cannot block the app install.")) {
+      return "";
+    }
+
+    state.packageInstallBusy = true;
+    renderSettings();
+    const response = await window.winshots.installPackage();
+    state.packageInfo = response.info || state.packageInfo;
+    state.packageInstallBusy = false;
+    renderSettings();
+    return "Winshots installed locally";
+  }
+
+  return "";
 }
 
 function scrollSelectionIntoView() {
@@ -759,6 +878,24 @@ function bindEvents() {
       return;
     }
 
+    if (event.target.closest("[data-settings-close]")) {
+      closeSettings();
+      return;
+    }
+
+    const settingsAction = event.target.closest("[data-settings-action]");
+    if (settingsAction) {
+      try {
+        const status = await runSettingsAction(settingsAction.dataset.settingsAction);
+        if (status) elements.sync.textContent = status;
+      } catch (error) {
+        state.packageInstallBusy = false;
+        renderSettings();
+        elements.sync.textContent = error.message || "Settings action failed";
+      }
+      return;
+    }
+
     const modalAction = event.target.closest("[data-modal-action]");
     if (modalAction && state.previewId) {
       try {
@@ -786,7 +923,7 @@ function bindEvents() {
         await runAppCapture({ pasteToCodex: true, reason: "electron-codex", status: "Capturing for Codex..." });
       }
       if (command === "timeline") {
-        toggleTimeline();
+        await toggleTimeline();
       }
       if (command === "session") {
         await toggleSession();
@@ -807,6 +944,11 @@ function bindEvents() {
 
     if (event.target.closest("[data-theme-toggle]")) {
       toggleTheme();
+      return;
+    }
+
+    if (event.target.closest("[data-settings-open]")) {
+      openSettings();
       return;
     }
 
@@ -855,6 +997,11 @@ function bindEvents() {
   });
 
   document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !elements.settingsModal.hidden) {
+      closeSettings();
+      return;
+    }
+
     if (event.key === "Escape" && !elements.previewModal.hidden) {
       closePreview();
       return;
