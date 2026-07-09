@@ -1,6 +1,6 @@
 {
   "name": "winshots",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Local Windows capture workflows for Codex debugging with Winshots and its MCP server.",
   "author": {
     "name": "Winshots"

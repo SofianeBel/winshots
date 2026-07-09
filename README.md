@@ -49,7 +49,7 @@ If Codex App is not already running, Windows refuses to focus it, or Winshots ca
 To install Winshots like a normal Windows app, run:
 
 ```text
-winshots-1.0.0-win-x64-setup.exe
+winshots-1.0.1-win-x64-setup.exe
 ```
 
 The setup installs the Windows app, Electron review UI, MCP server, Start Menu shortcuts, and an Apps & Features uninstaller under:
@@ -67,7 +67,7 @@ Codex plugin registration is intentionally separate so a locked Codex plugin cac
 For portable use without installation, download and extract:
 
 ```text
-winshots-1.0.0-win-x64.zip
+winshots-1.0.1-win-x64.zip
 ```
 
 Then run:
@@ -79,14 +79,14 @@ Then run:
 Build the installer package locally with:
 
 ```powershell
-.\scripts\build-release.ps1 -Version 1.0.0
+.\scripts\build-release.ps1 -Version 1.0.1
 ```
 
 The release files are written to:
 
 ```text
-artifacts\release\winshots-1.0.0-win-x64-setup.exe
-artifacts\release\winshots-1.0.0-win-x64.zip
+artifacts\release\winshots-1.0.1-win-x64-setup.exe
+artifacts\release\winshots-1.0.1-win-x64.zip
 ```
 
 ## Run
