@@ -1,5 +1,6 @@
 param(
     [string]$InstallRoot = "$env:LOCALAPPDATA\Programs\Winshots",
+    [switch]$InstallCodexPlugin,
     [switch]$SkipCodexPlugin,
     [switch]$NoStartMenuShortcut
 )
@@ -103,7 +104,11 @@ if (-not $NoStartMenuShortcut) {
         -WorkingDirectory $installRootPath
 }
 
-if (-not $SkipCodexPlugin) {
+if ($SkipCodexPlugin) {
+    $InstallCodexPlugin = $false
+}
+
+if ($InstallCodexPlugin) {
     if ($null -eq (Get-Command codex -ErrorAction SilentlyContinue)) {
         Write-Warning "Codex CLI was not found on PATH. Skipping Codex plugin registration."
     }
@@ -114,6 +119,9 @@ if (-not $SkipCodexPlugin) {
         Invoke-CodexCommand -Arguments @("plugin", "add", "winshots@winshots-local", "--json") | Out-Null
         Write-Host "Codex plugin installed. Open a new Codex thread for the plugin and MCP tools to load."
     }
+}
+else {
+    Write-Host "Codex plugin registration skipped. Run install.ps1 -InstallCodexPlugin after closing Codex if you want to refresh winshots@winshots-local."
 }
 
 Write-Host "Winshots installed to $installRootPath"

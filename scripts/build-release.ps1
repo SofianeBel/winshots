@@ -29,23 +29,35 @@ if (-not $outputRootPath.StartsWith($artifactsRoot, [System.StringComparison]::O
 
 $packageName = "winshots-$Version-$Runtime"
 $stagingRoot = Join-Path $outputRootPath $packageName
-$singlePublishRoot = Join-Path $outputRootPath "$packageName-single"
-$singleExePath = Join-Path $outputRootPath "$packageName.exe"
-$singleChecksumPath = "$singleExePath.sha256"
+$setupPublishRoot = Join-Path $outputRootPath "$packageName-setup"
+$setupExePath = Join-Path $outputRootPath "$packageName-setup.exe"
+$setupChecksumPath = "$setupExePath.sha256"
+$legacySinglePublishRoot = Join-Path $outputRootPath "$packageName-single"
+$legacySingleExePath = Join-Path $outputRootPath "$packageName.exe"
+$legacySingleChecksumPath = "$legacySingleExePath.sha256"
 $zipPath = Join-Path $outputRootPath "$packageName.zip"
 $checksumPath = "$zipPath.sha256"
 
 if (Test-Path $stagingRoot) {
     Remove-Item -LiteralPath $stagingRoot -Recurse -Force
 }
-if (Test-Path $singlePublishRoot) {
-    Remove-Item -LiteralPath $singlePublishRoot -Recurse -Force
+if (Test-Path $setupPublishRoot) {
+    Remove-Item -LiteralPath $setupPublishRoot -Recurse -Force
+}
+if (Test-Path $legacySinglePublishRoot) {
+    Remove-Item -LiteralPath $legacySinglePublishRoot -Recurse -Force
+}
+if (Test-Path $legacySingleExePath) {
+    Remove-Item -LiteralPath $legacySingleExePath -Force
+}
+if (Test-Path $legacySingleChecksumPath) {
+    Remove-Item -LiteralPath $legacySingleChecksumPath -Force
 }
 
 New-Item -ItemType Directory -Force -Path $stagingRoot | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $stagingRoot "app") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $stagingRoot "mcp") | Out-Null
-New-Item -ItemType Directory -Force -Path $singlePublishRoot | Out-Null
+New-Item -ItemType Directory -Force -Path $setupPublishRoot | Out-Null
 
 Invoke-CheckedNative "dotnet" @(
     "publish",
@@ -74,28 +86,6 @@ Invoke-CheckedNative "dotnet" @(
     (Join-Path $stagingRoot "mcp"),
     "-p:Version=$Version"
 )
-
-Invoke-CheckedNative "dotnet" @(
-    "publish",
-    (Join-Path $root "src\Winshots.App\Winshots.App.csproj"),
-    "--configuration",
-    $Configuration,
-    "--runtime",
-    $Runtime,
-    "--self-contained",
-    "true",
-    "--output",
-    $singlePublishRoot,
-    "-p:Version=$Version",
-    "-p:PublishSingleFile=true",
-    "-p:IncludeNativeLibrariesForSelfExtract=true",
-    "-p:EnableCompressionInSingleFile=true"
-)
-
-if (Test-Path $singleExePath) {
-    Remove-Item -LiteralPath $singleExePath -Force
-}
-Copy-Item -LiteralPath (Join-Path $singlePublishRoot "Winshots.App.exe") -Destination $singleExePath -Force
 
 Copy-Item -LiteralPath (Join-Path $root ".codex-plugin") -Destination (Join-Path $stagingRoot ".codex-plugin") -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $root ".agents") -Destination (Join-Path $stagingRoot ".agents") -Recurse -Force
@@ -142,7 +132,7 @@ else {
 if (Test-Path (Join-Path $stagingRoot "electron-runtime\electron.exe")) {
     @"
 @echo off
-"%~dp0electron-runtime\electron.exe" "%~dp0electron-ui" %*
+"%~dp0app\Winshots.App.exe" %*
 "@ | Set-Content -Path (Join-Path $stagingRoot "Winshots Review UI.cmd") -Encoding ASCII
 }
 
@@ -155,9 +145,11 @@ $releaseNotes = @"
 
 - Includes the Winshots Windows app and the Winshots MCP server.
 - Includes the Codex plugin files at version $Version.
-- Download $packageName.zip for the full Electron UI installer package with MCP and Codex plugin files.
-- Download $packageName.exe as a launcher executable when the full $packageName folder is beside it.
-- Run install.ps1 from the extracted archive to install under %LOCALAPPDATA%\Programs\Winshots.
+- Download $packageName-setup.exe to install Winshots like a normal Windows app under %LOCALAPPDATA%\Programs\Winshots.
+- Download $packageName.zip for the full portable package with Electron UI, MCP, and Codex plugin files.
+- Run Winshots Review UI.cmd from the extracted zip to start the C# host, Electron UI, shortcuts, overlay/session controls, and local MCP files together.
+- The setup installs the app, creates Start Menu shortcuts, and registers an Apps & Features uninstaller.
+- Codex plugin registration is separate so a locked Codex plugin cache cannot break the Winshots app install.
 - Captures and sessions stay local under the user's Documents folder unless the user shares them explicitly.
 "@
 Set-Content -Path (Join-Path $outputRootPath "RELEASE_NOTES.md") -Value $releaseNotes -Encoding UTF8
@@ -167,12 +159,35 @@ if (Test-Path $zipPath) {
 }
 Get-ChildItem -LiteralPath $stagingRoot -Force | Compress-Archive -DestinationPath $zipPath -Force
 
+Invoke-CheckedNative "dotnet" @(
+    "publish",
+    (Join-Path $root "src\Winshots.Installer\Winshots.Installer.csproj"),
+    "--configuration",
+    $Configuration,
+    "--runtime",
+    $Runtime,
+    "--self-contained",
+    "true",
+    "--output",
+    $setupPublishRoot,
+    "-p:Version=$Version",
+    "-p:PayloadZip=$zipPath",
+    "-p:PublishSingleFile=true",
+    "-p:IncludeNativeLibrariesForSelfExtract=true",
+    "-p:EnableCompressionInSingleFile=true"
+)
+
+if (Test-Path $setupExePath) {
+    Remove-Item -LiteralPath $setupExePath -Force
+}
+Copy-Item -LiteralPath (Join-Path $setupPublishRoot "Winshots.Setup.exe") -Destination $setupExePath -Force
+
 $hash = Get-FileHash -Path $zipPath -Algorithm SHA256
 Set-Content -Path $checksumPath -Value "$($hash.Hash)  $(Split-Path -Leaf $zipPath)" -Encoding ASCII
-$singleHash = Get-FileHash -Path $singleExePath -Algorithm SHA256
-Set-Content -Path $singleChecksumPath -Value "$($singleHash.Hash)  $(Split-Path -Leaf $singleExePath)" -Encoding ASCII
+$setupHash = Get-FileHash -Path $setupExePath -Algorithm SHA256
+Set-Content -Path $setupChecksumPath -Value "$($setupHash.Hash)  $(Split-Path -Leaf $setupExePath)" -Encoding ASCII
 
+Write-Host "Windows installer: $setupExePath"
+Write-Host "SHA256: $setupChecksumPath"
 Write-Host "Release package: $zipPath"
 Write-Host "SHA256: $checksumPath"
-Write-Host "Standalone executable: $singleExePath"
-Write-Host "SHA256: $singleChecksumPath"

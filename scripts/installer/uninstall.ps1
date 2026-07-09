@@ -1,5 +1,6 @@
 param(
     [string]$InstallRoot = "$env:LOCALAPPDATA\Programs\Winshots",
+    [switch]$RemoveCodexPlugin,
     [switch]$SkipCodexPlugin
 )
 
@@ -25,9 +26,16 @@ if ([string]::IsNullOrWhiteSpace($installRootPath) -or $installRootPath -eq $roo
     throw "InstallRoot is not safe: $installRootPath"
 }
 
-if (-not $SkipCodexPlugin) {
+if ($SkipCodexPlugin) {
+    $RemoveCodexPlugin = $false
+}
+
+if ($RemoveCodexPlugin) {
     Invoke-CodexCommand -Arguments @("plugin", "remove", "winshots@winshots-local", "--json")
     Invoke-CodexCommand -Arguments @("plugin", "marketplace", "remove", "winshots-local", "--json")
+}
+else {
+    Write-Host "Codex plugin registration left unchanged. Run uninstall.ps1 -RemoveCodexPlugin after closing Codex if you want to remove it."
 }
 
 $programsFolder = [Environment]::GetFolderPath("Programs")

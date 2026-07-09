@@ -1,6 +1,22 @@
-# Winshots Installer
+# Winshots Setup and Portable Package
 
-Extract the release archive, then run:
+For normal installation, run the setup executable from the release:
+
+```text
+winshots-1.0.0-win-x64-setup.exe
+```
+
+The setup installs Winshots under the local user profile, creates Start Menu shortcuts, and registers an Apps & Features uninstaller.
+
+Extract the release archive, then run the connected UI directly:
+
+```powershell
+.\Winshots Review UI.cmd
+```
+
+This starts the C# host, Electron review UI, global shortcuts, overlay/session controls, and local MCP files together.
+
+The portable package also keeps a script fallback for local installs:
 
 ```powershell
 .\install.ps1
@@ -12,7 +28,7 @@ The default install location is:
 %LOCALAPPDATA%\Programs\Winshots
 ```
 
-The installer copies the Windows app, the MCP server, and the Codex plugin files. If the Codex CLI is available, it refreshes `winshots@winshots-local` so new Codex threads can load the installed MCP server.
+The local install copies the Windows app, the MCP server, and the Codex plugin files. It does not touch Codex plugin cache by default.
 
 Captures and visual sessions are not stored in the install directory. They stay under:
 
@@ -21,10 +37,10 @@ Captures and visual sessions are not stored in the install directory. They stay 
 %USERPROFILE%\Documents\Winshots\sessions
 ```
 
-To install without touching Codex plugin state:
+To refresh the Codex plugin after closing Codex:
 
 ```powershell
-.\install.ps1 -SkipCodexPlugin
+.\install.ps1 -InstallCodexPlugin
 ```
 
 To uninstall:

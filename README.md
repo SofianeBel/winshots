@@ -44,27 +44,37 @@ If Codex App is not already running, Windows refuses to focus it, or Winshots ca
 - Optional: `ffmpeg` on `PATH` to create visual session `video.mp4` files
 - Optional: Codex Desktop/CLI for Capture to Codex and MCP workflows
 
-## Install
+## Install Or Run Portable
 
-For the Windows launcher executable, download:
+To install Winshots like a normal Windows app, run:
 
 ```text
-winshots-1.0.0-win-x64.exe
+winshots-1.0.0-win-x64-setup.exe
 ```
 
-The launcher opens the Electron UI when the full package folder is available beside it. For the full Electron UI, MCP server, and Codex plugin files, download the `winshots-1.0.0-win-x64.zip` release archive, extract it, then run:
-
-```powershell
-.\install.ps1
-```
-
-The installer copies the app and MCP server to:
+The setup installs the Windows app, Electron review UI, MCP server, Start Menu shortcuts, and an Apps & Features uninstaller under:
 
 ```text
 %LOCALAPPDATA%\Programs\Winshots
 ```
 
-It also refreshes the local Codex plugin `winshots@winshots-local` when the `codex` CLI is available. Open a new Codex thread after installing so the plugin skills and MCP tools are loaded.
+Codex plugin registration is intentionally separate so a locked Codex plugin cache cannot break the Winshots app install. After closing Codex, run this from the installed folder only when you want to refresh `winshots@winshots-local`:
+
+```powershell
+.\install.ps1 -InstallCodexPlugin
+```
+
+For portable use without installation, download and extract:
+
+```text
+winshots-1.0.0-win-x64.zip
+```
+
+Then run:
+
+```powershell
+.\Winshots Review UI.cmd
+```
 
 Build the installer package locally with:
 
@@ -75,7 +85,7 @@ Build the installer package locally with:
 The release files are written to:
 
 ```text
-artifacts\release\winshots-1.0.0-win-x64.exe
+artifacts\release\winshots-1.0.0-win-x64-setup.exe
 artifacts\release\winshots-1.0.0-win-x64.zip
 ```
 
