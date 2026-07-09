@@ -4,12 +4,15 @@ const fs = require("node:fs");
 const net = require("node:net");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
-const { app, BrowserWindow, clipboard, ipcMain, nativeImage, shell } = require("electron");
+const { app, BrowserWindow, clipboard, ipcMain, Menu, nativeImage, shell, Tray } = require("electron");
 
 const rendererPath = path.join(__dirname, "renderer", "index.html");
 const isSmoke = process.argv.includes("--smoke");
 const screenshotPath = readArgValue("--screenshot");
 const screenshotMode = readArgValue("--screenshot-mode") || "main";
+const screenshotTheme = readArgValue("--screenshot-theme");
+const screenshotWidth = Math.max(1180, Number(readArgValue("--screenshot-width")) || 1672);
+const screenshotHeight = Math.max(720, Number(readArgValue("--screenshot-height")) || 941);
 const hostPipeName = process.env.WINSHOTS_HOST_PIPE || "";
 const automationMode = readArgValue("--automation");
 const automationOutputPath = readArgValue("--automation-output");
@@ -19,6 +22,8 @@ const automationHoldMs = Math.min(60_000, Math.max(0, readNumberArg("--automatio
 const automationTimeoutMs = Math.min(180_000, Math.max(30_000, readNumberArg("--automation-timeout-ms", 120_000)));
 
 let mainWindow;
+let tray;
+let isQuitting = false;
 let smokeTimer;
 let automationTimer;
 let automationFinished = false;
@@ -26,6 +31,67 @@ let screenshotInProgress = false;
 let screenshotAttempts = 0;
 let activeSession = null;
 const fileHashCache = new Map();
+
+function backgroundSettingsPath() {
+  return path.join(app.getPath("userData"), "settings.json");
+}
+
+function readBackgroundSettings() {
+  try {
+    const settings = JSON.parse(fs.readFileSync(backgroundSettingsPath(), "utf8"));
+    return { enabled: Boolean(settings.alwaysOn) };
+  } catch {
+    return { enabled: false };
+  }
+}
+
+function writeBackgroundSettings(enabled) {
+  const settingsPath = backgroundSettingsPath();
+  let settings = {};
+  try {
+    settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+  } catch {
+    // The file is created the first time this setting is changed.
+  }
+
+  fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+  fs.writeFileSync(settingsPath, `${JSON.stringify({ ...settings, alwaysOn: Boolean(enabled) }, null, 2)}\n`, "utf8");
+  updateTray();
+  return readBackgroundSettings();
+}
+
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  mainWindow.show();
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  mainWindow.focus();
+}
+
+function updateTray() {
+  if (!readBackgroundSettings().enabled) {
+    tray?.destroy();
+    tray = undefined;
+    return;
+  }
+
+  if (!tray) {
+    const icon = nativeImage.createFromPath(path.join(__dirname, "assets", "winshots.ico"));
+    tray = new Tray(icon);
+    tray.setToolTip("Winshots");
+    tray.on("double-click", showMainWindow);
+  }
+
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: "Open Winshots", click: showMainWindow },
+    { type: "separator" },
+    { label: "Quit Winshots", click: () => { isQuitting = true; app.quit(); } }
+  ]));
+}
 
 function readArgValue(name) {
   const inline = process.argv.find((arg) => arg.startsWith(`${name}=`));
@@ -293,6 +359,37 @@ function readPackageInfo() {
       "local MCP files"
     ]
   };
+}
+
+function startupAppPath() {
+  const candidates = [
+    path.join(defaultInstallRoot(), "app", "Winshots.App.exe"),
+    path.join(resolvePackageRoot(), "app", "Winshots.App.exe")
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate)) || "";
+}
+
+function readStartupSettings() {
+  const appPath = startupAppPath();
+  if (!appPath) {
+    return { available: false, enabled: false };
+  }
+
+  const settings = app.getLoginItemSettings({ path: appPath });
+  return { available: true, enabled: settings.openAtLogin };
+}
+
+function writeStartupSettings(enabled) {
+  const appPath = startupAppPath();
+  if (!appPath) {
+    throw new Error("Install Winshots locally before enabling launch at startup.");
+  }
+
+  app.setLoginItemSettings({
+    openAtLogin: Boolean(enabled),
+    path: appPath
+  });
+  return readStartupSettings();
 }
 
 async function runPackageInstall() {
@@ -577,8 +674,8 @@ function removeCaptureFromIndex(root, captureId) {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1672,
-    height: 941,
+    width: screenshotPath ? screenshotWidth : 1672,
+    height: screenshotPath ? screenshotHeight : 941,
     minWidth: 1180,
     minHeight: 720,
     show: !isSmoke,
@@ -589,6 +686,14 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       preload: path.join(__dirname, "preload.cjs")
+    }
+  });
+
+  updateTray();
+  mainWindow.on("close", (event) => {
+    if (!isQuitting && readBackgroundSettings().enabled && !isSmoke && !screenshotPath && !isAutomation) {
+      event.preventDefault();
+      mainWindow.hide();
     }
   });
 
@@ -685,6 +790,8 @@ async function captureScreenshotAndExit() {
   try {
     const outputPath = path.resolve(screenshotPath);
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    await mainWindow.webContents.capturePage();
+    await new Promise((resolve) => setTimeout(resolve, 250));
     const image = await mainWindow.webContents.capturePage();
     fs.writeFileSync(outputPath, image.toPNG());
     automationFinished = true;
@@ -710,6 +817,17 @@ async function captureScreenshotAndExit() {
 async function prepareScreenshotMode() {
   if (!mainWindow) {
     return;
+  }
+
+  if (screenshotTheme === "light" || screenshotTheme === "dark") {
+    await mainWindow.webContents.executeJavaScript(`
+      new Promise((resolve) => {
+        if (typeof applyTheme === "function") {
+          applyTheme(${JSON.stringify(screenshotTheme)});
+        }
+        setTimeout(() => requestAnimationFrame(() => requestAnimationFrame(resolve)), 500);
+      });
+    `);
   }
 
   const selectorByMode = {
@@ -1441,6 +1559,14 @@ ipcMain.handle("package:open-folder", async () => {
   return true;
 });
 
+ipcMain.handle("settings:startup:get", () => readStartupSettings());
+
+ipcMain.handle("settings:startup:set", (_event, enabled) => writeStartupSettings(enabled));
+
+ipcMain.handle("settings:background:get", () => readBackgroundSettings());
+
+ipcMain.handle("settings:background:set", (_event, enabled) => writeBackgroundSettings(enabled));
+
 ipcMain.handle("window:minimize", () => mainWindow?.minimize());
 ipcMain.handle("window:maximize", () => {
   if (!mainWindow) {
@@ -1475,4 +1601,9 @@ ipcMain.on("renderer:ready", async () => {
 });
 
 app.whenReady().then(createWindow);
-app.on("window-all-closed", () => app.quit());
+app.on("before-quit", () => { isQuitting = true; });
+app.on("window-all-closed", () => {
+  if (!readBackgroundSettings().enabled) {
+    app.quit();
+  }
+});

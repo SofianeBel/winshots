@@ -4,7 +4,8 @@ const iconPaths = {
   codex: '<circle cx="12" cy="12" r="9"/><path d="m9 12 2 2 4-5"/>',
   context: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/>',
   image: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="m21 16-5-5L5 19"/>',
-  theme: '<path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/><circle cx="12" cy="12" r="4"/>',
+  sun: '<path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/><circle cx="12" cy="12" r="4"/>',
+  moon: '<path d="M20.6 15.6A8.5 8.5 0 0 1 8.4 3.4 8.5 8.5 0 1 0 20.6 15.6Z"/>',
   settings: '<path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.05.05a2.1 2.1 0 0 1-2.97 2.97l-.05-.05a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.08 1.65V21a2.1 2.1 0 0 1-4.2 0v-.08a1.8 1.8 0 0 0-1.08-1.65 1.8 1.8 0 0 0-1.98.36l-.05.05a2.1 2.1 0 0 1-2.97-2.97l.05-.05a1.8 1.8 0 0 0 .36-1.98 1.8 1.8 0 0 0-1.65-1.08H3a2.1 2.1 0 0 1 0-4.2h.08a1.8 1.8 0 0 0 1.65-1.08 1.8 1.8 0 0 0-.36-1.98l-.05-.05a2.1 2.1 0 0 1 2.97-2.97l.05.05a1.8 1.8 0 0 0 1.98.36h.02a1.8 1.8 0 0 0 1.06-1.65V3a2.1 2.1 0 0 1 4.2 0v.08a1.8 1.8 0 0 0 1.08 1.65 1.8 1.8 0 0 0 1.98-.36l.05-.05a2.1 2.1 0 0 1 2.97 2.97l-.05.05a1.8 1.8 0 0 0-.36 1.98v.02a1.8 1.8 0 0 0 1.65 1.06H21a2.1 2.1 0 0 1 0 4.2h-.08a1.8 1.8 0 0 0-1.52 1.08Z"/>',
   list: '<path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/>',
   grid: '<rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><rect x="14" y="14" width="6" height="6"/>',
@@ -26,14 +27,18 @@ const state = {
   autoScroll: true,
   previewId: null,
   root: "",
-  source: "",
   captureBusy: false,
   timelineRunning: false,
   sessionRunning: false,
   settingsOpen: false,
   packageInfo: null,
+  startupSettings: null,
+  startupBusy: false,
+  backgroundSettings: null,
+  backgroundBusy: false,
   packageInstallBusy: false,
-  inspectorRequestId: 0
+  inspectorRequestId: 0,
+  theme: "dark"
 };
 
 const elements = {
@@ -56,6 +61,9 @@ const elements = {
   settingsLauncher: document.querySelector("[data-settings-launcher]"),
   settingsInstallCopy: document.querySelector("[data-settings-install-copy]"),
   settingsInstallButton: document.querySelector('[data-settings-action="install-local"]'),
+  settingsStartup: document.querySelector("[data-settings-startup]"),
+  settingsStartupCopy: document.querySelector("[data-settings-startup-copy]"),
+  settingsBackground: document.querySelector("[data-settings-background]"),
   previewModal: document.querySelector("[data-preview-modal]"),
   previewTitle: document.querySelector("#preview-title"),
   previewMeta: document.querySelector("#preview-meta"),
@@ -98,7 +106,6 @@ function setCaptureBusy(busy) {
 
 function applyCaptureResponse(response) {
   state.root = response.root;
-  state.source = response.source;
   state.captures = response.captures || [];
   refreshFilteredCaptures();
   state.selectedId = state.filteredCaptures[0]?.id || null;
@@ -108,7 +115,7 @@ function applyCaptureResponse(response) {
 async function loadCaptures(statusText) {
   const response = await window.winshots.listCaptures();
   applyCaptureResponse(response);
-  elements.sync.textContent = statusText || (state.captures.length > 0 ? "Synced just now" : "No local captures found");
+  elements.sync.textContent = statusText || (state.captures.length > 0 ? "Local library ready" : "No local captures found");
 }
 
 function commandMessage(response, fallback) {
@@ -315,17 +322,11 @@ function renderMetrics() {
   const captureCount = state.filteredCaptures.length;
   const latest = state.filteredCaptures[0];
   const resolution = latest?.resolution || "No captures";
-  const source = state.source || "local files";
-  const textNodes = state.filteredCaptures.reduce((sum, capture) => {
-    return sum + Number(capture.metrics?.AutomationNodeCount || capture.metrics?.automationNodeCount || 0);
-  }, 0);
 
   const metrics = [
     { icon: "capture", label: `${captureCount} captures` },
-    { icon: "codex", label: latest ? formatAge(latest) : "empty" },
-    { icon: "image", label: resolution },
-    { icon: "list", label: source },
-    { icon: "context", label: `${textNodes.toLocaleString()} nodes` }
+    { icon: "timeline", label: latest ? `${formatAge(latest)} ago` : "No recent captures" },
+    { icon: "image", label: resolution }
   ];
 
   elements.metrics.innerHTML = metrics
@@ -366,7 +367,7 @@ function renderListRows() {
         .join("");
 
       return `
-        <div class="capture-row data-row${active}" role="row" tabindex="0" data-capture-row data-capture-id="${escapeHtml(capture.id)}">
+        <div class="capture-row data-row${active}" role="row" aria-selected="${capture.id === state.selectedId}" tabindex="0" data-capture-row data-capture-id="${escapeHtml(capture.id)}">
           <span role="cell">${String(index + 1).padStart(2, "0")}</span>
           <span role="cell" class="preview-cell">${thumbnailMarkup(capture)}</span>
           <span role="cell" class="title-cell">${escapeHtml(captureTitle(capture))}</span>
@@ -388,7 +389,7 @@ function renderGridRows() {
         .join("");
 
       return `
-        <article class="capture-card${active}" tabindex="0" data-capture-row data-capture-id="${escapeHtml(capture.id)}">
+        <article class="capture-card${active}" aria-current="${capture.id === state.selectedId}" tabindex="0" data-capture-row data-capture-id="${escapeHtml(capture.id)}">
           ${thumbnailMarkup(capture)}
           <div>
             <span class="capture-card-title">${escapeHtml(captureTitle(capture))}</span>
@@ -557,7 +558,15 @@ function escapeHtml(value) {
 
 function updateSelection(captureId) {
   state.selectedId = captureId;
-  renderRows();
+  elements.rows.querySelectorAll("[data-capture-row]").forEach((row) => {
+    const active = row.dataset.captureId === captureId;
+    row.classList.toggle("active", active);
+    if (row.getAttribute("role") === "row") {
+      row.setAttribute("aria-selected", String(active));
+    } else {
+      row.setAttribute("aria-current", String(active));
+    }
+  });
   renderRecent();
   renderInspector();
 }
@@ -586,13 +595,13 @@ function applyProjectFilter(project) {
 
 function titleForFilter(filter) {
   const titles = {
-    all: "Winshots captures",
-    codex: "Codex-ready captures",
+    all: "Captures",
+    codex: "Codex captures",
     context: "Captures with context",
     images: "Captures with screenshots"
   };
 
-  return titles[filter] || "Winshots captures";
+  return titles[filter] || "Captures";
 }
 
 function updateTitle() {
@@ -664,11 +673,22 @@ function renderSettings() {
   elements.settingsInstallCopy.textContent = installCopy(info);
   elements.settingsInstallButton.disabled = state.packageInstallBusy || !info?.canInstall;
   elements.settingsInstallButton.textContent = state.packageInstallBusy ? "Installing..." : "Install locally";
+  elements.settingsStartup.checked = Boolean(state.startupSettings?.enabled);
+  elements.settingsStartup.disabled = state.startupBusy || !state.startupSettings?.available;
+  elements.settingsStartupCopy.textContent = state.startupSettings?.available
+    ? "Starts the Winshots host and review UI when you sign in to Windows."
+    : "Install Winshots locally to make this option available.";
+  elements.settingsBackground.checked = Boolean(state.backgroundSettings?.enabled);
+  elements.settingsBackground.disabled = state.backgroundBusy;
 }
 
 async function loadPackageInfo() {
   try {
-    state.packageInfo = await window.winshots.packageInfo();
+    [state.packageInfo, state.startupSettings, state.backgroundSettings] = await Promise.all([
+      window.winshots.packageInfo(),
+      window.winshots.getStartupSettings(),
+      window.winshots.getBackgroundSettings()
+    ]);
   } catch (error) {
     state.packageInfo = null;
     elements.sync.textContent = error.message || "Package check failed";
@@ -732,28 +752,49 @@ function toggleSidebar() {
   elements.sync.textContent = collapsed ? "Sidebar collapsed" : "Sidebar expanded";
 }
 
-function applyStoredTheme() {
-  let focusTheme = false;
-  try {
-    focusTheme = window.localStorage.getItem("winshots.focusTheme") === "true";
-  } catch {
-    focusTheme = false;
-  }
+function systemTheme() {
+  return window.matchMedia?.("(prefers-color-scheme: light)")?.matches ? "light" : "dark";
+}
 
-  document.body.classList.toggle("focus-theme", focusTheme);
-  elements.themeToggle.setAttribute("aria-pressed", String(focusTheme));
+function storedTheme() {
+  try {
+    const theme = window.localStorage.getItem("winshots.theme");
+    return theme === "light" || theme === "dark" ? theme : null;
+  } catch {
+    return null;
+  }
+}
+
+function applyTheme(theme, announce = false) {
+  const nextTheme = theme === "light" ? "light" : "dark";
+  const targetTheme = nextTheme === "dark" ? "light" : "dark";
+  const targetLabel = `Switch to ${targetTheme} theme`;
+
+  state.theme = nextTheme;
+  document.documentElement.dataset.theme = nextTheme;
+  elements.themeToggle.dataset.icon = targetTheme === "light" ? "sun" : "moon";
+  elements.themeToggle.innerHTML = svgIcon(elements.themeToggle.dataset.icon);
+  elements.themeToggle.setAttribute("aria-label", targetLabel);
+  elements.themeToggle.setAttribute("title", targetLabel);
+  elements.themeToggle.setAttribute("aria-pressed", String(nextTheme === "light"));
+
+  if (announce) {
+    elements.sync.textContent = `${nextTheme === "light" ? "Light" : "Dark"} theme enabled`;
+  }
+}
+
+function applyStoredTheme() {
+  applyTheme(storedTheme() || systemTheme());
 }
 
 function toggleTheme() {
-  const focusTheme = !document.body.classList.contains("focus-theme");
-  document.body.classList.toggle("focus-theme", focusTheme);
-  elements.themeToggle.setAttribute("aria-pressed", String(focusTheme));
+  const nextTheme = state.theme === "dark" ? "light" : "dark";
+  applyTheme(nextTheme, true);
   try {
-    window.localStorage.setItem("winshots.focusTheme", String(focusTheme));
+    window.localStorage.setItem("winshots.theme", nextTheme);
   } catch {
     // Local storage is best-effort for file-backed Electron pages.
   }
-  elements.sync.textContent = focusTheme ? "Focus theme enabled" : "Default theme enabled";
 }
 
 function captureById(captureId) {
@@ -852,7 +893,6 @@ async function runCaptureAction(action, captureId) {
 
     const response = await window.winshots.trashCapture(captureId);
     state.root = response.root;
-    state.source = response.source;
     state.captures = response.captures || [];
     refreshFilteredCaptures();
     if (state.previewId === captureId) {
@@ -1019,6 +1059,40 @@ function bindEvents() {
     elements.sync.textContent = state.autoScroll ? "Auto-scroll enabled" : "Auto-scroll disabled";
     scrollSelectionIntoView();
   });
+
+  elements.settingsStartup.addEventListener("change", async () => {
+    const enabled = elements.settingsStartup.checked;
+    state.startupBusy = true;
+    renderSettings();
+    try {
+      state.startupSettings = await window.winshots.setStartupEnabled(enabled);
+      elements.sync.textContent = enabled
+        ? "Winshots will launch at Windows startup"
+        : "Launch at startup disabled";
+    } catch (error) {
+      elements.sync.textContent = error.message || "Startup setting failed";
+    } finally {
+      state.startupBusy = false;
+      renderSettings();
+    }
+  });
+
+  elements.settingsBackground.addEventListener("change", async () => {
+    const enabled = elements.settingsBackground.checked;
+    state.backgroundBusy = true;
+    renderSettings();
+    try {
+      state.backgroundSettings = await window.winshots.setBackgroundEnabled(enabled);
+      elements.sync.textContent = enabled
+        ? "Winshots will keep running in the background"
+        : "Background mode disabled";
+    } catch (error) {
+      elements.sync.textContent = error.message || "Background setting failed";
+    } finally {
+      state.backgroundBusy = false;
+      renderSettings();
+    }
+  });
 }
 
 async function waitForImages() {
@@ -1039,6 +1113,7 @@ async function waitForImages() {
 async function init() {
   mountIcons();
   applyStoredTheme();
+  requestAnimationFrame(() => document.body.classList.add("theme-transitions"));
   bindEvents();
 
   try {

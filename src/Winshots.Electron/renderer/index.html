@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -41,7 +41,7 @@
             </button>
             <button class="nav-item" type="button" data-filter="codex">
               <span class="nav-icon" data-icon="codex"></span>
-              <span>Codex-ready</span>
+              <span>Codex captures</span>
             </button>
             <button class="nav-item" type="button" data-filter="context">
               <span class="nav-icon" data-icon="context"></span>
@@ -55,7 +55,7 @@
 
           <section class="sidebar-group">
             <div class="sidebar-heading">
-              <span>Projects</span>
+              <span>Sources</span>
             </div>
             <div id="project-list" class="project-list"></div>
           </section>
@@ -69,10 +69,10 @@
 
           <section class="sidebar-footer">
             <div class="footer-tools">
-              <button class="icon-button" type="button" aria-label="Toggle theme" aria-pressed="false" data-theme-toggle data-icon="theme"></button>
+              <button class="icon-button" type="button" aria-label="Switch to light theme" aria-pressed="false" title="Switch to light theme" data-theme-toggle data-icon="sun"></button>
               <button class="icon-button" type="button" aria-label="Settings" data-settings-open data-icon="settings"></button>
             </div>
-            <p><span class="status-dot"></span><span id="sync-status">Loading captures...</span></p>
+            <p><span class="status-dot"></span><span id="sync-status" aria-live="polite">Loading local captures...</span></p>
           </section>
         </aside>
 
@@ -80,7 +80,7 @@
           <section class="content-head">
             <div>
               <div class="capture-title">
-                <h1 id="capture-set-title">Winshots captures</h1>
+                <h1 id="capture-set-title">Captures</h1>
               </div>
               <div class="metrics-row" id="summary-metrics"></div>
             </div>
@@ -164,6 +164,26 @@
           <section class="settings-section">
             <h3>Launcher</h3>
             <p class="settings-copy" data-settings-launcher></p>
+          </section>
+          <section class="settings-section">
+            <h3>Startup</h3>
+            <label class="settings-toggle">
+              <span>
+                <strong>Launch Winshots at startup</strong>
+                <small data-settings-startup-copy>Checking startup settings...</small>
+              </span>
+              <input type="checkbox" data-settings-startup>
+            </label>
+          </section>
+          <section class="settings-section">
+            <h3>Background</h3>
+            <label class="settings-toggle">
+              <span>
+                <strong>Keep Winshots running when closed</strong>
+                <small>Closing the window hides it in the notification area. Use its icon to reopen or quit Winshots.</small>
+              </span>
+              <input type="checkbox" data-settings-background>
+            </label>
           </section>
           <section class="settings-section">
             <h3>Local install</h3>
