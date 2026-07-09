@@ -583,6 +583,7 @@ function createWindow() {
     minHeight: 720,
     show: !isSmoke,
     frame: false,
+    icon: path.join(__dirname, "assets", "winshots.ico"),
     backgroundColor: "#101113",
     webPreferences: {
       contextIsolation: true,
