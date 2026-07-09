@@ -8,6 +8,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>Winshots.Setup</AssemblyName>
     <RootNamespace>Winshots.Installer</RootNamespace>
+    <ApplicationIcon>Assets\winshots.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(PayloadZip)' != ''">

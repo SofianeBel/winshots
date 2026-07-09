@@ -358,7 +358,7 @@ public sealed class MainForm : Form
 
         _notifyIcon = new NotifyIcon
         {
-            Icon = SystemIcons.Application,
+            Icon = Icon,
             Text = "Winshots",
             Visible = true,
             ContextMenuStrip = BuildTrayMenu()
