@@ -211,6 +211,104 @@ public static class WinshotsTools
         return SendReplayHostCommand("replay.save", payload, TimeSpan.FromSeconds(60));
     }
 
+    [McpServerTool, Description("Wait until a matching capturable Windows window exists. Returns succeeded, timed_out, or cancelled with applied bounds and observation diagnostics.")]
+    public static async Task<string> WaitForWindow(
+        [Description("Optional window handle returned by list_windows.")] string? windowHandle = null,
+        [Description("Optional case-insensitive window title substring.")] string? titleContains = null,
+        [Description("Optional case-insensitive process name substring, with or without .exe.")] string? processName = null,
+        [Description("Bounded wait timeout in milliseconds, clamped to 100-300000.")] int timeoutMs = 10_000,
+        [Description("Polling cadence in milliseconds, clamped to 100-5000.")] int pollIntervalMs = 500,
+        CancellationToken cancellationToken = default)
+    {
+        AgentWatchService service = CreateAgentWatchService(null);
+        AgentWatchResult result = await service.WaitForWindowAsync(
+            CreateAgentWatchTarget(windowHandle, titleContains, processName),
+            CreateAgentWatchOptions(timeoutMs, pollIntervalMs),
+            cancellationToken).ConfigureAwait(false);
+        return JsonSerializer.Serialize(result, JsonOptions);
+    }
+
+    [McpServerTool, Description("Wait until a case-insensitive text substring appears in the current local Windows UI Automation context for a matching window. No OCR is used.")]
+    public static async Task<string> WaitForText(
+        [Description("Required case-insensitive substring to find in Windows UI Automation text.")] string textContains,
+        [Description("Optional window handle returned by list_windows.")] string? windowHandle = null,
+        [Description("Optional case-insensitive window title substring.")] string? titleContains = null,
+        [Description("Optional case-insensitive process name substring, with or without .exe.")] string? processName = null,
+        [Description("Bounded wait timeout in milliseconds, clamped to 100-300000.")] int timeoutMs = 10_000,
+        [Description("Polling cadence in milliseconds, clamped to 100-5000.")] int pollIntervalMs = 500,
+        CancellationToken cancellationToken = default)
+    {
+        AgentWatchService service = CreateAgentWatchService(null);
+        AgentWatchResult result = await service.WaitForTextAsync(
+            CreateAgentWatchTarget(windowHandle, titleContains, processName),
+            textContains,
+            CreateAgentWatchOptions(timeoutMs, pollIntervalMs),
+            cancellationToken).ConfigureAwait(false);
+        return JsonSerializer.Serialize(result, JsonOptions);
+    }
+
+    [McpServerTool, Description("Wait until a matching window changes by at least a deterministic perceptual dHash distance. Observation captures remain local.")]
+    public static async Task<string> WaitForChange(
+        [Description("Optional window handle returned by list_windows.")] string? windowHandle = null,
+        [Description("Optional case-insensitive window title substring.")] string? titleContains = null,
+        [Description("Optional case-insensitive process name substring, with or without .exe.")] string? processName = null,
+        [Description("Optional capture root for local Agent Watch frame artifacts.")] string? outputRoot = null,
+        [Description("Bounded wait timeout in milliseconds, clamped to 100-300000.")] int timeoutMs = 10_000,
+        [Description("Polling cadence in milliseconds, clamped to 100-5000.")] int pollIntervalMs = 500,
+        [Description("Minimum dHash Hamming distance treated as change, clamped to 1-64.")] int minHashDistance = 5,
+        CancellationToken cancellationToken = default)
+    {
+        AgentWatchService service = CreateAgentWatchService(outputRoot);
+        AgentWatchResult result = await service.WaitForChangeAsync(
+            CreateAgentWatchTarget(windowHandle, titleContains, processName),
+            CreateAgentWatchOptions(timeoutMs, pollIntervalMs) with { MinChangeHashDistance = minHashDistance },
+            cancellationToken).ConfigureAwait(false);
+        return JsonSerializer.Serialize(result, JsonOptions);
+    }
+
+    [McpServerTool, Description("Wait for a matching window, or optional UI Automation text within it, to disappear after it has first been observed. Initial absence does not succeed.")]
+    public static async Task<string> WaitForDisappear(
+        [Description("Optional case-insensitive Windows UI Automation text substring. Omit to wait for the window itself to disappear.")] string? textContains = null,
+        [Description("Optional window handle returned by list_windows.")] string? windowHandle = null,
+        [Description("Optional case-insensitive window title substring.")] string? titleContains = null,
+        [Description("Optional case-insensitive process name substring, with or without .exe.")] string? processName = null,
+        [Description("Bounded wait timeout in milliseconds, clamped to 100-300000.")] int timeoutMs = 10_000,
+        [Description("Polling cadence in milliseconds, clamped to 100-5000.")] int pollIntervalMs = 500,
+        CancellationToken cancellationToken = default)
+    {
+        AgentWatchService service = CreateAgentWatchService(null);
+        AgentWatchResult result = await service.WaitForDisappearAsync(
+            CreateAgentWatchTarget(windowHandle, titleContains, processName),
+            textContains,
+            CreateAgentWatchOptions(timeoutMs, pollIntervalMs),
+            cancellationToken).ConfigureAwait(false);
+        return JsonSerializer.Serialize(result, JsonOptions);
+    }
+
+    [McpServerTool, Description("Wait until a matching window remains visually stable for an applied duration using bounded perceptual dHash comparisons. Observation captures remain local.")]
+    public static async Task<string> WaitForStable(
+        [Description("Optional window handle returned by list_windows.")] string? windowHandle = null,
+        [Description("Optional case-insensitive window title substring.")] string? titleContains = null,
+        [Description("Optional case-insensitive process name substring, with or without .exe.")] string? processName = null,
+        [Description("Optional capture root for local Agent Watch frame artifacts.")] string? outputRoot = null,
+        [Description("Bounded wait timeout in milliseconds, clamped to 100-300000.")] int timeoutMs = 10_000,
+        [Description("Polling cadence in milliseconds, clamped to 100-5000.")] int pollIntervalMs = 500,
+        [Description("Required stable duration in milliseconds, clamped to 100-60000.")] int stableDurationMs = 1_500,
+        [Description("Maximum dHash Hamming distance still treated as stable, clamped to 0-64.")] int maxHashDistance = 2,
+        CancellationToken cancellationToken = default)
+    {
+        AgentWatchService service = CreateAgentWatchService(outputRoot);
+        AgentWatchResult result = await service.WaitForStableAsync(
+            CreateAgentWatchTarget(windowHandle, titleContains, processName),
+            CreateAgentWatchOptions(timeoutMs, pollIntervalMs) with
+            {
+                StableDurationMs = stableDurationMs,
+                MaxStableHashDistance = maxHashDistance
+            },
+            cancellationToken).ConfigureAwait(false);
+        return JsonSerializer.Serialize(result, JsonOptions);
+    }
+
     [McpServerTool, Description("Start a local visual debugging session that captures screenshot frames plus UI Automation context for Codex.")]
     public static string StartVisualSession(
         [Description("Optional session root. Defaults to the user's Documents\\Winshots\\sessions folder.")] string? outputRoot = null,
@@ -328,6 +426,33 @@ public static class WinshotsTools
         return string.IsNullOrWhiteSpace(outputRoot)
             ? CapturePaths.DefaultRoot
             : Path.GetFullPath(outputRoot);
+    }
+
+    private static AgentWatchService CreateAgentWatchService(string? outputRoot)
+    {
+        return new AgentWatchService(ResolveRoot(outputRoot));
+    }
+
+    private static AgentWatchTarget CreateAgentWatchTarget(
+        string? windowHandle,
+        string? titleContains,
+        string? processName)
+    {
+        return new AgentWatchTarget
+        {
+            WindowHandle = windowHandle,
+            TitleContains = titleContains,
+            ProcessName = processName
+        };
+    }
+
+    private static AgentWatchOptions CreateAgentWatchOptions(int timeoutMs, int pollIntervalMs)
+    {
+        return new AgentWatchOptions
+        {
+            TimeoutMs = timeoutMs,
+            PollIntervalMs = pollIntervalMs
+        };
     }
 
     private static string SendReplayHostCommand(

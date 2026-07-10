@@ -2,6 +2,7 @@ param(
     [switch]$Capture,
     [switch]$Session,
     [switch]$Replay,
+    [switch]$AgentWatch,
     [string]$Output = "artifacts\mcp-captures"
 )
 
@@ -32,13 +33,28 @@ $messages = @(
             capabilities = @{}
             clientInfo = @{
                 name = "winshots-smoke"
-                version = "1.2.0"
+                version = "1.3.0"
             }
         }
     }
 )
 
-if ($Capture) {
+if ($AgentWatch) {
+    $messages += @{
+        jsonrpc = "2.0"
+        id = 2
+        method = "tools/call"
+        params = @{
+            name = "wait_for_window"
+            arguments = @{
+                titleContains = "Winshots Agent Watch smoke target that cannot exist"
+                timeoutMs = 300
+                pollIntervalMs = 100
+            }
+        }
+    }
+}
+elseif ($Capture) {
     $messages += @{
         jsonrpc = "2.0"
         id = 2
@@ -141,11 +157,41 @@ if ($process.ExitCode -ne 0) {
     throw $stderr
 }
 
-if (-not $Capture -and -not $Session -and -not $Replay -and $stdout -notmatch "capture_active_window") {
+if (-not $Capture -and -not $Session -and -not $Replay -and -not $AgentWatch -and $stdout -notmatch "capture_active_window") {
     throw "MCP smoke did not expose capture_active_window."
 }
 
-if ($Capture) {
+if ($AgentWatch) {
+    $callResponse = $null
+    foreach ($line in ($stdout -split "\r?\n")) {
+        if ([string]::IsNullOrWhiteSpace($line)) {
+            continue
+        }
+
+        try {
+            $message = $line | ConvertFrom-Json
+            if ($message.id -eq 2) {
+                $callResponse = $message
+            }
+        }
+        catch {
+        }
+    }
+
+    $watchResult = if ($null -ne $callResponse) {
+        $callResponse.result.content[0].text | ConvertFrom-Json
+    }
+    else {
+        $null
+    }
+
+    if ($null -eq $watchResult -or $watchResult.Outcome -ne "timed_out" -or $null -eq $watchResult.AppliedBounds) {
+        throw "MCP Agent Watch response did not return bounded timeout diagnostics. Output: $stdout"
+    }
+
+    Write-Host "MCP Agent Watch bounded timeout OK"
+}
+elseif ($Capture) {
     if ($stdout -notmatch "ScreenshotPath") {
         throw "MCP capture response did not include a screenshot path."
     }
@@ -203,11 +249,11 @@ elseif ($Replay) {
     Write-Host "MCP Instant Replay host bridge OK"
 }
 else {
-    foreach ($toolName in @("list_windows", "capture_window", "capture_active_window", "list_recent_captures", "read_capture_context", "start_visual_session", "stop_visual_session", "list_visual_sessions", "read_visual_session_context", "get_instant_replay_status", "start_instant_replay", "stop_instant_replay", "save_instant_replay")) {
+    foreach ($toolName in @("list_windows", "capture_window", "capture_active_window", "list_recent_captures", "read_capture_context", "start_visual_session", "stop_visual_session", "list_visual_sessions", "read_visual_session_context", "get_instant_replay_status", "start_instant_replay", "stop_instant_replay", "save_instant_replay", "wait_for_window", "wait_for_text", "wait_for_change", "wait_for_disappear", "wait_for_stable")) {
         if ($stdout -notmatch $toolName) {
             throw "MCP smoke did not expose $toolName."
         }
     }
 
-    Write-Host "MCP tools OK: window targeting, capture, context, visual session, and Instant Replay host tools"
+    Write-Host "MCP tools OK: window targeting, capture, context, visual session, Instant Replay, and Agent Watch waits"
 }
