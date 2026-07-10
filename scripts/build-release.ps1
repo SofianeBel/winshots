@@ -120,8 +120,8 @@ if (-not $SkipElectronRuntime -and (Test-Path (Join-Path $electronRuntimeSource 
     } | ConvertTo-Json -Depth 4
     Set-Content -Path (Join-Path $stagingRoot "electron-ui\package.json") -Value $electronPackage -Encoding UTF8
 }
-else {
-    Write-Warning "Electron runtime was not found. Run npm ci first or pass -SkipElectronRuntime intentionally."
+elseif (-not $SkipElectronRuntime) {
+    throw "Electron runtime was not found. Run npx install-electron first or pass -SkipElectronRuntime intentionally."
 }
 
 @"
