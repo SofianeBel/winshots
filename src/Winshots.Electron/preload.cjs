@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld("winshots", {
   toggleTimeline: (options) => ipcRenderer.invoke("timeline:toggle", options),
   startVisualSession: (options) => ipcRenderer.invoke("sessions:start", options),
   stopVisualSession: () => ipcRenderer.invoke("sessions:stop"),
+  listSessions: () => ipcRenderer.invoke("sessions:list"),
+  readSessionDetails: (sessionId) => ipcRenderer.invoke("sessions:details", sessionId),
   readCaptureContext: (captureId) => ipcRenderer.invoke("captures:context", captureId),
   openCaptureFolder: (captureId) => ipcRenderer.invoke("captures:open-folder", captureId),
   copyScreenshotPath: (captureId) => ipcRenderer.invoke("captures:copy-path", captureId),

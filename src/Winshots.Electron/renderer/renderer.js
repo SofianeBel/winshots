@@ -20,6 +20,10 @@ const iconPaths = {
 const state = {
   captures: [],
   filteredCaptures: [],
+  section: "captures",
+  sessions: [],
+  selectedSessionId: null,
+  selectedFrameNumber: null,
   selectedId: null,
   filter: "all",
   project: null,
@@ -75,6 +79,15 @@ const elements = {
   intervalInput: document.querySelector("[data-interval-seconds]")
 };
 
+elements.captureView = document.querySelector("[data-capture-view]");
+elements.sessionView = document.querySelector("[data-session-view]");
+elements.sessionList = document.querySelector("#session-list");
+elements.sessionDetail = document.querySelector("#session-detail");
+elements.sessionCount = document.querySelector("#session-count");
+elements.viewTools = document.querySelector("[data-view-tools]");
+elements.captureSidebar = [...document.querySelectorAll("[data-capture-sidebar]")];
+elements.inspectorTitle = document.querySelector("#inspector-title");
+
 function svgIcon(name) {
   const path = iconPaths[name] || iconPaths.capture;
   return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${path}</svg>`;
@@ -118,17 +131,54 @@ async function loadCaptures(statusText) {
   elements.sync.textContent = statusText || (state.captures.length > 0 ? "Local library ready" : "No local captures found");
 }
 
+async function loadSessions(statusText) {
+  const response = await window.winshots.listSessions();
+  state.sessions = response.sessions || [];
+  if (!state.sessions.some((session) => session.id === state.selectedSessionId)) {
+    state.selectedSessionId = state.sessions[0]?.id || null;
+  }
+
+  if (state.selectedSessionId) {
+    await loadSessionDetails(state.selectedSessionId);
+  }
+
+  renderAll();
+  elements.sync.textContent = statusText || (state.sessions.length > 0 ? "Local sessions ready" : "No local sessions found");
+}
+
+async function loadSessionDetails(sessionId) {
+  const current = state.sessions.find((session) => session.id === sessionId);
+  if (!current || current.detailsLoaded) {
+    return;
+  }
+
+  const details = await window.winshots.readSessionDetails(sessionId);
+  const index = state.sessions.findIndex((session) => session.id === sessionId);
+  if (index >= 0) {
+    state.sessions[index] = { ...state.sessions[index], ...details, detailsLoaded: true };
+  }
+
+  const frames = details.frames || [];
+  if (!frames.some((frame) => frame.number === state.selectedFrameNumber)) {
+    state.selectedFrameNumber = frames[0]?.number || null;
+  }
+}
+
 function commandMessage(response, fallback) {
   const command = response?.command;
   if (command?.CodexPasteMessage || command?.codexPasteMessage) {
     return command.CodexPasteMessage || command.codexPasteMessage;
   }
 
+  if (command?.Message || command?.message) {
+    return command.Message || command.message;
+  }
+
   if (command?.DirectoryPath || command?.directoryPath) {
     return fallback;
   }
 
-  return command?.Message || command?.message || fallback;
+  return fallback;
 }
 
 async function runAppCapture({ pasteToCodex = false, reason = "electron", status = "Capturing..." } = {}) {
@@ -185,6 +235,9 @@ async function toggleSession() {
       elements.sessionCommand.querySelector("span:last-child").textContent = "Session";
       const frames = response?.manifest?.CapturedFrameCount ?? 0;
       elements.sync.textContent = `Session saved (${frames} frames)`;
+      if (state.section === "sessions") {
+        await loadSessions(elements.sync.textContent);
+      }
     } catch (error) {
       elements.sync.textContent = error.message || "Session stop failed";
     } finally {
@@ -262,6 +315,15 @@ function formatBytes(bytes) {
   return `${Math.round(value / 1000)} KB`;
 }
 
+function formatSessionDuration(session) {
+  const total = Number(session.totalMs || 0);
+  if (total > 0) {
+    return total >= 60_000 ? `${(total / 60_000).toFixed(1)}m` : `${(total / 1000).toFixed(1)}s`;
+  }
+
+  return session.maxDurationSeconds ? `${session.maxDurationSeconds}s max` : "Unknown";
+}
+
 function labelsFor(capture) {
   const text = `${capture.windowTitle} ${capture.processName} ${capture.reason}`.toLowerCase();
   const labels = [];
@@ -332,6 +394,70 @@ function renderMetrics() {
   elements.metrics.innerHTML = metrics
     .map((metric) => `<span class="metric">${svgIcon(metric.icon)}${escapeHtml(metric.label)}</span>`)
     .join("");
+}
+
+function renderSessionMetrics() {
+  const frames = state.sessions.reduce((total, session) => total + Number(session.capturedFrameCount || 0), 0);
+  const withVideo = state.sessions.filter((session) => session.videoPath).length;
+  const metrics = [
+    { icon: "session", label: `${state.sessions.length} sessions` },
+    { icon: "image", label: `${frames} frames` },
+    { icon: "timeline", label: `${withVideo} with video` }
+  ];
+  elements.metrics.innerHTML = metrics
+    .map((metric) => `<span class="metric">${svgIcon(metric.icon)}${escapeHtml(metric.label)}</span>`)
+    .join("");
+}
+
+function selectedSession() {
+  return state.sessions.find((session) => session.id === state.selectedSessionId) || null;
+}
+
+function selectedSessionFrame(session = selectedSession()) {
+  return session?.frames?.find((frame) => frame.number === state.selectedFrameNumber) || session?.frames?.[0] || null;
+}
+
+function renderSessionBrowser() {
+  elements.sessionCount.textContent = String(state.sessions.length);
+  if (state.sessions.length === 0) {
+    elements.sessionList.innerHTML = `<div class="empty-state"><strong>No sessions found</strong><span>Visual sessions stay under Documents\\Winshots\\sessions.</span></div>`;
+    elements.sessionDetail.innerHTML = `<div class="empty-state"><strong>No session selected</strong><span>Start a visual session to create local frames and context.</span></div>`;
+    return;
+  }
+
+  elements.sessionList.innerHTML = state.sessions.map((session) => {
+    const active = session.id === state.selectedSessionId ? " active" : "";
+    return `
+      <button type="button" class="session-item${active}" data-session-id="${escapeHtml(session.id)}">
+        <strong>${escapeHtml(session.id)}</strong>
+        <span>${escapeHtml(session.startedLocal || session.startedUtc || "Unknown time")}</span>
+        <small>${Number(session.capturedFrameCount || 0)} frames · ${escapeHtml(session.status || "incomplete")}</small>
+      </button>`;
+  }).join("");
+
+  const session = selectedSession();
+  if (!session?.detailsLoaded) {
+    elements.sessionDetail.innerHTML = `<div class="empty-state"><strong>Loading session</strong><span>Reading local frame metadata...</span></div>`;
+    return;
+  }
+
+  const frame = selectedSessionFrame(session);
+  const preview = frame?.screenshotUrl
+    ? `<img src="${escapeHtml(frame.screenshotUrl)}" alt="Frame ${frame.number} from ${escapeHtml(session.id)}" />`
+    : `<div class="empty-state"><strong>No frame image</strong><span>${escapeHtml(frame?.error || "This session has no captured frames.")}</span></div>`;
+  const timeline = (session.frames || []).map((item) => {
+    const active = item.number === frame?.number ? " active" : "";
+    const failed = item.captured ? "" : " failed";
+    return `<button type="button" class="frame-marker${active}${failed}" data-frame-number="${item.number}" title="${escapeHtml(item.timestampLocal || item.error || `Frame ${item.number}`)}">${String(item.number).padStart(2, "0")}</button>`;
+  }).join("");
+
+  elements.sessionDetail.innerHTML = `
+    <header class="session-detail-head">
+      <div><strong>${escapeHtml(session.id)}</strong><span>${Number(session.capturedFrameCount || 0)} captured · ${Number(session.failedFrameCount || 0)} failed</span></div>
+      <span class="session-video-status">${session.videoPath ? "Video available" : "No video"}</span>
+    </header>
+    <div class="session-preview">${preview}</div>
+    <div class="session-timeline" aria-label="Session frame timeline">${timeline || '<span class="muted">No frame index is available.</span>'}</div>`;
 }
 
 function renderRows() {
@@ -459,6 +585,11 @@ function renderRecent() {
 }
 
 async function renderInspector() {
+  if (state.section === "sessions") {
+    renderSessionInspector();
+    return;
+  }
+
   const requestId = ++state.inspectorRequestId;
   const capture = state.captures.find((item) => item.id === state.selectedId);
   if (!capture) {
@@ -494,6 +625,15 @@ async function renderInspector() {
   const labels = labelsFor(capture)
     .map((label) => `<span class="tag">${escapeHtml(label)}</span>`)
     .join("");
+  const imageDiagnostics = capture.diagnostics?.Image || capture.diagnostics?.image;
+  const automationDiagnostics = capture.diagnostics?.UiAutomation || capture.diagnostics?.uiAutomation;
+  const attempts = imageDiagnostics?.Attempts || imageDiagnostics?.attempts || [];
+  const imageStatus = imageDiagnostics
+    ? `${imageDiagnostics.Status || imageDiagnostics.status}${imageDiagnostics.Strategy || imageDiagnostics.strategy ? ` via ${imageDiagnostics.Strategy || imageDiagnostics.strategy}` : ""}`
+    : "Legacy capture";
+  const attemptSummary = attempts.length > 0
+    ? attempts.map((attempt) => `${attempt.Strategy || attempt.strategy}: ${attempt.Status || attempt.status}`).join("; ")
+    : "Not recorded";
 
   elements.inspector.innerHTML = `
     <section class="inspector-section">
@@ -506,10 +646,16 @@ async function renderInspector() {
       ${infoRow("Resolution", capture.resolution)}
       ${infoRow("Window", capture.processName)}
       ${infoRow("Source", capture.windowHandle || "Display 1")}
-      ${infoRow("File", "screenshot.png")}
+      ${infoRow("File", capture.imageCaptured ? "screenshot.png" : "Not available")}
       ${infoRow("Size", formatBytes(capture.screenshotBytes))}
       ${infoRow("Text", `${Number(capture.extractedTextLength || 0).toLocaleString()} chars`)}
       ${infoRow("Hash", capture.hash ? `${capture.hash.slice(0, 12)}...` : "-")}
+    </section>
+    <section class="inspector-section">
+      <h4>Diagnostics</h4>
+      ${infoRow("Image", imageStatus)}
+      ${infoRow("Attempts", attemptSummary)}
+      ${infoRow("UIA", automationDiagnostics?.Status || automationDiagnostics?.status || "Legacy capture")}
     </section>
     <section class="inspector-section">
       <h4>Labels</h4>
@@ -530,6 +676,41 @@ async function renderInspector() {
       ${actionButton("trash", "trash", "Move to Recycle Bin", false, true)}
     </section>
   `;
+}
+
+function renderSessionInspector() {
+  const session = selectedSession();
+  const frame = selectedSessionFrame(session);
+  if (!session) {
+    elements.inspector.innerHTML = `<p class="muted">Select a local session to inspect its frames and context.</p>`;
+    return;
+  }
+
+  const imageDiagnostics = frame?.diagnostics?.Image || frame?.diagnostics?.image;
+  const automationDiagnostics = frame?.diagnostics?.UiAutomation || frame?.diagnostics?.uiAutomation;
+  const context = frame?.context || session.context || "Context is not available for this frame.";
+  elements.inspector.innerHTML = `
+    <section class="inspector-section">
+      <h3>${escapeHtml(session.id)}</h3>
+      <h4>Session</h4>
+      ${infoRow("Status", session.status || "incomplete")}
+      ${infoRow("Started", session.startedLocal || session.startedUtc)}
+      ${infoRow("Duration", formatSessionDuration(session))}
+      ${infoRow("Frames", `${Number(session.capturedFrameCount || 0)} captured / ${Number(session.failedFrameCount || 0)} failed`)}
+      ${infoRow("Video", session.videoPath ? "Available" : session.videoError || "Not created")}
+    </section>
+    <section class="inspector-section">
+      <h4>${frame ? `Frame ${String(frame.number).padStart(6, "0")}` : "Frame"}</h4>
+      ${infoRow("Captured", frame?.timestampLocal || frame?.timestampUtc || "Unknown")}
+      ${infoRow("Window", frame?.windowTitle || "Unknown")}
+      ${infoRow("Process", frame?.processName || "Unknown")}
+      ${infoRow("Image", imageDiagnostics?.Status || imageDiagnostics?.status || (frame?.captured ? "Legacy capture" : "Missing"))}
+      ${infoRow("UIA", automationDiagnostics?.Status || automationDiagnostics?.status || "Legacy capture")}
+    </section>
+    <section class="inspector-section">
+      <h4>Context</h4>
+      <textarea class="context-box session-context" rows="12" spellcheck="false" readonly>${escapeHtml(contextPreview(context))}</textarea>
+    </section>`;
 }
 
 function actionButton(action, icon, label, disabled = false, danger = false) {
@@ -572,6 +753,7 @@ function updateSelection(captureId) {
 }
 
 function applyActiveFilter(filter) {
+  state.section = "captures";
   state.filter = filter;
   state.project = null;
   refreshFilteredCaptures();
@@ -583,6 +765,7 @@ function applyActiveFilter(filter) {
 }
 
 function applyProjectFilter(project) {
+  state.section = "captures";
   state.project = project;
   state.filter = "all";
   refreshFilteredCaptures();
@@ -605,17 +788,61 @@ function titleForFilter(filter) {
 }
 
 function updateTitle() {
-  elements.title.textContent = state.project ? `${state.project} captures` : titleForFilter(state.filter);
+  elements.title.textContent = state.section === "sessions"
+    ? "Sessions"
+    : state.project ? `${state.project} captures` : titleForFilter(state.filter);
 }
 
 function renderAll() {
+  const showingSessions = state.section === "sessions";
+  elements.captureView.hidden = showingSessions;
+  elements.sessionView.hidden = !showingSessions;
+  elements.viewTools.hidden = showingSessions;
+  elements.captureSidebar.forEach((group) => { group.hidden = showingSessions; });
+  elements.inspectorTitle.textContent = showingSessions ? "Session inspector" : "Inspector";
   updateTitle();
+  if (showingSessions) {
+    renderSessionMetrics();
+    renderSessionBrowser();
+    renderInspector();
+    return;
+  }
+
   renderMetrics();
   renderRows();
   renderProjects();
   renderRecent();
   renderInspector();
   renderPreview();
+}
+
+async function showSessions() {
+  state.section = "sessions";
+  state.project = null;
+  document.querySelectorAll(".nav-item").forEach((item) => {
+    item.classList.toggle("active", item.dataset.section === "sessions");
+  });
+  renderAll();
+  try {
+    await loadSessions();
+  } catch (error) {
+    elements.sync.textContent = error.message || "Session load failed";
+    elements.sessionDetail.innerHTML = `<div class="empty-state"><strong>Session load failed</strong><span>${escapeHtml(error.message)}</span></div>`;
+  }
+}
+
+async function selectSession(sessionId) {
+  state.selectedSessionId = sessionId;
+  state.selectedFrameNumber = null;
+  renderSessionBrowser();
+  renderInspector();
+  try {
+    await loadSessionDetails(sessionId);
+    renderSessionBrowser();
+    renderInspector();
+  } catch (error) {
+    elements.sync.textContent = error.message || "Session details failed";
+  }
 }
 
 function setViewMode(mode) {
@@ -1001,6 +1228,26 @@ function bindEvents() {
     const filterButton = event.target.closest(".nav-item[data-filter]");
     if (filterButton) {
       applyActiveFilter(filterButton.dataset.filter);
+      return;
+    }
+
+    const sectionButton = event.target.closest(".nav-item[data-section]");
+    if (sectionButton?.dataset.section === "sessions") {
+      await showSessions();
+      return;
+    }
+
+    const sessionButton = event.target.closest("[data-session-id]");
+    if (sessionButton) {
+      await selectSession(sessionButton.dataset.sessionId);
+      return;
+    }
+
+    const frameButton = event.target.closest("[data-frame-number]");
+    if (frameButton) {
+      state.selectedFrameNumber = Number(frameButton.dataset.frameNumber);
+      renderSessionBrowser();
+      renderInspector();
       return;
     }
 

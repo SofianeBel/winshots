@@ -39,6 +39,10 @@
               <span class="nav-icon" data-icon="capture"></span>
               <span>Captures</span>
             </button>
+            <button class="nav-item" type="button" data-section="sessions">
+              <span class="nav-icon" data-icon="session"></span>
+              <span>Sessions</span>
+            </button>
             <button class="nav-item" type="button" data-filter="codex">
               <span class="nav-icon" data-icon="codex"></span>
               <span>Codex captures</span>
@@ -53,14 +57,14 @@
             </button>
           </section>
 
-          <section class="sidebar-group">
+          <section class="sidebar-group" data-capture-sidebar>
             <div class="sidebar-heading">
               <span>Sources</span>
             </div>
             <div id="project-list" class="project-list"></div>
           </section>
 
-          <section class="sidebar-group recent-group">
+          <section class="sidebar-group recent-group" data-capture-sidebar>
             <div class="sidebar-heading">
               <span>Recent</span>
             </div>
@@ -107,14 +111,14 @@
                   <span>s</span>
                 </label>
               </div>
-              <div class="view-tools">
+              <div class="view-tools" data-view-tools>
                 <button type="button" class="segmented active" aria-label="List view" aria-pressed="true" data-view-mode="list" data-icon="list"></button>
                 <button type="button" class="segmented" aria-label="Grid view" aria-pressed="false" data-view-mode="grid" data-icon="grid"></button>
               </div>
             </div>
           </section>
 
-          <section class="table-panel" aria-label="Capture list">
+          <section class="table-panel" aria-label="Capture list" data-capture-view>
             <div class="capture-table" role="table" aria-label="Local captures">
               <div class="capture-row table-head" role="row">
                 <span role="columnheader">#</span>
@@ -134,11 +138,22 @@
               </label>
             </div>
           </section>
+
+          <section class="session-browser" aria-label="Local visual sessions" data-session-view hidden>
+            <div class="session-list-panel">
+              <header>
+                <strong>Local sessions</strong>
+                <span id="session-count">0</span>
+              </header>
+              <div id="session-list" class="session-list"></div>
+            </div>
+            <div id="session-detail" class="session-detail"></div>
+          </section>
         </main>
 
         <aside class="inspector" aria-label="Capture inspector">
           <header class="inspector-head">
-            <h2>Inspector</h2>
+            <h2 id="inspector-title">Inspector</h2>
           </header>
 
           <section class="inspector-body" id="inspector-body"></section>

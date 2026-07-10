@@ -5,6 +5,7 @@ const net = require("node:net");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { app, BrowserWindow, clipboard, ipcMain, Menu, nativeImage, shell, Tray } = require("electron");
+const { listSessions, readSessionDetails } = require("./session-library.cjs");
 
 const rendererPath = path.join(__dirname, "renderer", "index.html");
 const isSmoke = process.argv.includes("--smoke");
@@ -13,6 +14,7 @@ const screenshotMode = readArgValue("--screenshot-mode") || "main";
 const screenshotTheme = readArgValue("--screenshot-theme");
 const screenshotWidth = Math.max(1180, Number(readArgValue("--screenshot-width")) || 1672);
 const screenshotHeight = Math.max(720, Number(readArgValue("--screenshot-height")) || 941);
+const rendererReadyTimeoutMs = screenshotPath ? 30_000 : 10_000;
 const hostPipeName = process.env.WINSHOTS_HOST_PIPE || "";
 const automationMode = readArgValue("--automation");
 const automationOutputPath = readArgValue("--automation-output");
@@ -558,13 +560,17 @@ function fileSize(filePath) {
 
 function normalizeCapture(metadata, root) {
   const id = metadata.Id || metadata.id;
-  const screenshotPath = metadata.ScreenshotPath || metadata.screenshotPath || "";
+  const recordedScreenshotPath = metadata.ScreenshotPath || metadata.screenshotPath || "";
   const textPath = metadata.TextPath || metadata.textPath || "";
-  const directoryPath = screenshotPath ? path.dirname(screenshotPath) : path.join(root, id || "");
+  const directoryPath = recordedScreenshotPath ? path.dirname(recordedScreenshotPath) : path.join(root, id || "");
   const metadataPath = path.join(directoryPath, "metadata.json");
-  const size = fileSize(screenshotPath);
+  const screenshotExists = Boolean(recordedScreenshotPath && fs.existsSync(recordedScreenshotPath));
   const bounds = metadata.Bounds || metadata.bounds || {};
   const metrics = metadata.Metrics || metadata.metrics || {};
+  const diagnostics = metadata.Diagnostics || metadata.diagnostics || null;
+  const imageStatus = diagnostics?.Image?.Status || diagnostics?.image?.status || (screenshotExists ? "legacy" : "missing");
+  const imageCaptured = screenshotExists && !["failed", "invalid", "missing"].includes(imageStatus);
+  const screenshotPath = imageCaptured ? recordedScreenshotPath : "";
 
   return {
     id,
@@ -577,14 +583,17 @@ function normalizeCapture(metadata, root) {
     windowHandle: metadata.WindowHandle || metadata.windowHandle || "",
     bounds,
     metrics,
+    diagnostics,
+    imageCaptured,
+    imageStatus,
     extractedTextLength: metadata.ExtractedTextLength || metadata.extractedTextLength || 0,
     directoryPath,
     screenshotPath,
     textPath,
     metadataPath,
-    screenshotUrl: screenshotPath && fs.existsSync(screenshotPath) ? pathToFileURL(screenshotPath).href : "",
+    screenshotUrl: screenshotPath ? pathToFileURL(screenshotPath).href : "",
     contextPreview: "",
-    screenshotBytes: metrics.ScreenshotBytes || metrics.screenshotBytes || size,
+    screenshotBytes: metrics.ScreenshotBytes || metrics.screenshotBytes || fileSize(screenshotPath),
     hash: "",
     resolution: bounds.Width && bounds.Height ? `${bounds.Width}x${bounds.Height}` : "Unknown"
   };
@@ -783,9 +792,9 @@ function createWindow() {
 
   if (isSmoke || screenshotPath) {
     smokeTimer = setTimeout(() => {
-      console.error("Electron UI did not become ready within 10 seconds.");
+      console.error(`Electron UI did not become ready within ${rendererReadyTimeoutMs / 1000} seconds.`);
       app.exit(1);
-    }, 10_000);
+    }, rendererReadyTimeoutMs);
   }
 
   if (isAutomation) {
@@ -854,7 +863,8 @@ async function prepareScreenshotMode() {
   const selectorByMode = {
     grid: '[data-view-mode="grid"]',
     preview: "[data-open-preview]",
-    settings: "[data-settings-open]"
+    settings: "[data-settings-open]",
+    sessions: '[data-section="sessions"]'
   };
   const selector = selectorByMode[screenshotMode];
   if (!selector) {
@@ -1489,6 +1499,10 @@ ipcMain.handle("timeline:toggle", (_event, options) => toggleTimelineCommand(opt
 ipcMain.handle("sessions:start", (_event, options) => startVisualSession(options));
 
 ipcMain.handle("sessions:stop", () => stopVisualSession());
+
+ipcMain.handle("sessions:list", () => listSessions(resolveSessionRoot()));
+
+ipcMain.handle("sessions:details", (_event, sessionId) => readSessionDetails(resolveSessionRoot(), sessionId));
 
 ipcMain.handle("captures:context", async (_event, captureId) => {
   const { root, capture } = findCapture(captureId);
