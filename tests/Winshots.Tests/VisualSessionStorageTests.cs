@@ -29,6 +29,23 @@ public sealed class VisualSessionStorageTests : IDisposable
     }
 
     [Fact]
+    public void ListRecent_IgnoresPartialSessionWithManifest()
+    {
+        var storage = new VisualSessionStorage(_root);
+        string directory = storage.CreateSessionDirectory(new DateTimeOffset(2026, 6, 20, 12, 0, 0, TimeSpan.Zero));
+        var manifest = CreateManifest(directory);
+        string partialDirectory = directory + ".partial";
+        Directory.Move(directory, partialDirectory);
+        storage.WriteManifest(manifest with
+        {
+            DirectoryPath = partialDirectory,
+            ManifestPath = Path.Combine(partialDirectory, "session.json")
+        });
+
+        Assert.Empty(storage.ListRecent(10));
+    }
+
+    [Fact]
     public void BuildContextMarkdown_IncludesFrameArtifacts()
     {
         var storage = new VisualSessionStorage(_root);

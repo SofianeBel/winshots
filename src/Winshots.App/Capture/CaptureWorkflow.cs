@@ -56,6 +56,130 @@ public sealed class CaptureWorkflow
         }
     }
 
+    public ReplayCaptureAttempt TryCaptureReplayFrame(
+        IntPtr hwnd,
+        string directory,
+        string screenshotPath,
+        string textPath,
+        string metadataPath,
+        string id,
+        CaptureOptions options,
+        TimeSpan gateWait,
+        Func<WindowSnapshot, ulong, InstantReplayRetentionDecision> decideRetention)
+    {
+        DateTimeOffset timestamp = DateTimeOffset.Now;
+        WindowSnapshot? window = null;
+        ScreenshotCaptureResult? screenshot = null;
+        var totalStopwatch = Stopwatch.StartNew();
+        var screenshotStopwatch = new Stopwatch();
+
+        if (!CaptureGate.Wait(gateWait))
+        {
+            return new ReplayCaptureAttempt("busy", null, null, null, null, "Another capture owns the capture gate.");
+        }
+
+        try
+        {
+            if (!NativeMethods.IsUsableCaptureTarget(hwnd))
+            {
+                return new ReplayCaptureAttempt("failed", null, null, null, null, "The selected window cannot be captured.");
+            }
+
+            timestamp = DateTimeOffset.Now;
+            window = NativeMethods.GetWindowSnapshot(hwnd);
+            screenshotStopwatch.Start();
+            screenshot = WindowScreenshot.Save(hwnd, screenshotPath);
+            screenshotStopwatch.Stop();
+        }
+        catch (Exception ex)
+        {
+            return new ReplayCaptureAttempt("failed", null, window, null, null, ex.Message);
+        }
+        finally
+        {
+            CaptureGate.Release();
+        }
+
+        if (screenshot.Diagnostics.Status is "failed" or "invalid" || !File.Exists(screenshotPath))
+        {
+            TryDelete(screenshotPath);
+            return new ReplayCaptureAttempt("failed", null, window, null, null, screenshot.Diagnostics.Detail ?? "No valid replay image was captured.");
+        }
+
+        ulong perceptualHash;
+        InstantReplayRetentionDecision decision;
+        try
+        {
+            perceptualHash = PerceptualHash.Compute(screenshotPath);
+            decision = decideRetention(window!, perceptualHash);
+        }
+        catch (Exception ex)
+        {
+            TryDelete(screenshotPath);
+            return new ReplayCaptureAttempt("failed", null, window, null, null, ex.Message);
+        }
+
+        if (!decision.Retain)
+        {
+            TryDelete(screenshotPath);
+            return new ReplayCaptureAttempt("duplicate", null, window, perceptualHash, decision.Reason, null);
+        }
+
+        return TryCompleteReplayCapture(
+            CaptureGate,
+            gateWait,
+            screenshotPath,
+            window!,
+            perceptualHash,
+            decision.Reason,
+            () => CompleteCapture(
+                hwnd,
+                "instant-replay",
+                directory,
+                screenshotPath,
+                textPath,
+                metadataPath,
+                appendToIndex: false,
+                id,
+                options,
+                timestamp,
+                window!,
+                screenshot,
+                totalStopwatch,
+                screenshotStopwatch.ElapsedMilliseconds));
+    }
+
+    internal static ReplayCaptureAttempt TryCompleteReplayCapture(
+        SemaphoreSlim gate,
+        TimeSpan gateWait,
+        string screenshotPath,
+        WindowSnapshot window,
+        ulong perceptualHash,
+        string retentionReason,
+        Func<CaptureResult> completeCapture)
+    {
+        if (!gate.Wait(gateWait))
+        {
+            TryDelete(screenshotPath);
+            return new ReplayCaptureAttempt("busy", null, window, perceptualHash, retentionReason, "Another capture owns the capture gate.");
+        }
+
+        try
+        {
+            CaptureResult result = completeCapture();
+            return new ReplayCaptureAttempt("retained", result, window, perceptualHash, retentionReason, null);
+        }
+        catch (Exception ex)
+        {
+            TryDelete(screenshotPath);
+            return new ReplayCaptureAttempt("failed", null, window, perceptualHash, retentionReason, ex.Message);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
     private CaptureResult CaptureWindowToPathsCore(
         IntPtr hwnd,
         string reason,
@@ -81,6 +205,39 @@ public sealed class CaptureWorkflow
         ScreenshotCaptureResult screenshot = WindowScreenshot.Save(hwnd, screenshotPath);
         screenshotStopwatch.Stop();
 
+        return CompleteCapture(
+            hwnd,
+            reason,
+            directory,
+            screenshotPath,
+            textPath,
+            metadataPath,
+            appendToIndex,
+            id,
+            options,
+            timestamp,
+            window,
+            screenshot,
+            totalStopwatch,
+            screenshotStopwatch.ElapsedMilliseconds);
+    }
+
+    private CaptureResult CompleteCapture(
+        IntPtr hwnd,
+        string reason,
+        string directory,
+        string screenshotPath,
+        string textPath,
+        string metadataPath,
+        bool appendToIndex,
+        string? id,
+        CaptureOptions options,
+        DateTimeOffset timestamp,
+        WindowSnapshot window,
+        ScreenshotCaptureResult screenshot,
+        Stopwatch totalStopwatch,
+        long screenshotMs)
+    {
         long screenshotBytes = File.Exists(screenshotPath) ? new FileInfo(screenshotPath).Length : 0;
 
         var textStopwatch = Stopwatch.StartNew();
@@ -105,7 +262,7 @@ public sealed class CaptureWorkflow
             Metrics = new CaptureMetrics
             {
                 TotalMs = totalStopwatch.ElapsedMilliseconds,
-                ScreenshotMs = screenshotStopwatch.ElapsedMilliseconds,
+                ScreenshotMs = screenshotMs,
                 TextExtractionMs = textStopwatch.ElapsedMilliseconds,
                 ScreenshotBytes = screenshotBytes,
                 AutomationNodeCount = extraction.NodeCount,
@@ -125,5 +282,20 @@ public sealed class CaptureWorkflow
         };
 
         return _storage.WriteCapture(directory, metadata, extraction.Text, metadataPath, appendToIndex);
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch
+        {
+            // Recovery removes incomplete replay candidates on the next start.
+        }
     }
 }

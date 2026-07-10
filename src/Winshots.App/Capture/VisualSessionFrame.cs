@@ -15,4 +15,6 @@ public sealed record VisualSessionFrame
     public CaptureBounds? Bounds { get; init; }
     public CaptureMetrics? Metrics { get; init; }
     public CaptureDiagnostics? Diagnostics { get; init; }
+    public string? PerceptualHash { get; init; }
+    public string? RetentionReason { get; init; }
 }

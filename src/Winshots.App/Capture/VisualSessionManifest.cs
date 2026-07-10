@@ -23,4 +23,12 @@ public sealed record VisualSessionManifest
     public string? VideoPath { get; init; }
     public string? VideoError { get; init; }
     public long? TotalMs { get; init; }
+    public string? SessionType { get; init; }
+    public string? Source { get; init; }
+    public int? LookbackSeconds { get; init; }
+    public string? WindowStartUtc { get; init; }
+    public string? WindowEndUtc { get; init; }
+    public int? DuplicateFrameCount { get; init; }
+    public int? IgnoredFrameCount { get; init; }
+    public int? ChangeEventCount { get; init; }
 }

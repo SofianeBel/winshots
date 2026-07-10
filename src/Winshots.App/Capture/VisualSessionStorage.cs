@@ -77,12 +77,19 @@ public sealed class VisualSessionStorage
 
         return Directory
             .EnumerateFiles(RootPath, "session.json", SearchOption.AllDirectories)
+            .Where(static path => !IsPartialSessionPath(path))
             .Select(TryReadManifest)
             .Where(static manifest => manifest is not null)
             .Cast<VisualSessionManifest>()
             .OrderByDescending(static manifest => manifest.StartedUtc, StringComparer.Ordinal)
             .Take(Math.Clamp(maxCount, 1, 50))
             .ToArray();
+    }
+
+    private static bool IsPartialSessionPath(string manifestPath)
+    {
+        string? directory = Path.GetDirectoryName(manifestPath);
+        return directory is not null && directory.EndsWith(".partial", StringComparison.OrdinalIgnoreCase);
     }
 
     public string ResolveSessionDirectory(string sessionIdOrDirectory)
@@ -115,7 +122,10 @@ public sealed class VisualSessionStorage
         return manifest ?? throw new FileNotFoundException("Visual session manifest was not found.", manifestPath);
     }
 
-    public static string BuildContextMarkdown(VisualSessionManifest manifest, IReadOnlyList<VisualSessionFrame> frames)
+    public static string BuildContextMarkdown(
+        VisualSessionManifest manifest,
+        IReadOnlyList<VisualSessionFrame> frames,
+        Func<VisualSessionFrame, string>? readContext = null)
     {
         var builder = new StringBuilder();
         builder.AppendLine("# Winshots visual session");
@@ -147,7 +157,7 @@ public sealed class VisualSessionStorage
             builder.AppendLine($"Metrics: total={frame.Metrics?.TotalMs ?? 0}ms screenshot={frame.Metrics?.ScreenshotMs ?? 0}ms text={frame.Metrics?.TextExtractionMs ?? 0}ms");
             builder.AppendLine();
             builder.AppendLine("```text");
-            builder.AppendLine(ReadPreview(frame.TextPath));
+            builder.AppendLine(readContext is null ? ReadPreview(frame.TextPath) : readContext(frame));
             builder.AppendLine("```");
             builder.AppendLine();
         }
