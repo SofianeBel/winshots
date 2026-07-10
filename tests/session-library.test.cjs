@@ -134,3 +134,15 @@ test("resolves a session whose legacy manifest id differs from its folder name",
   assert.equal(listed.sessions[0].id, "legacy-manifest-id");
   assert.equal(details.id, "legacy-manifest-id");
 });
+
+test("ignores instant replay partial session directories", (t) => {
+  const root = createRoot(t);
+  const partial = path.join(root, "20260710-120000-000-instant-replay.partial");
+  fs.mkdirSync(partial, { recursive: true });
+  fs.writeFileSync(path.join(partial, "session.json"), JSON.stringify({ Id: "partial-session" }));
+
+  const listed = listSessions(root);
+
+  assert.equal(listed.sessions.length, 0);
+  assert.throws(() => readSessionDetails(root, "partial-session"), /not found/i);
+});

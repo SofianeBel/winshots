@@ -34,6 +34,10 @@ const state = {
   captureBusy: false,
   timelineRunning: false,
   sessionRunning: false,
+  instantReplay: null,
+  replayUnavailableMessage: "",
+  replayBusy: false,
+  replayStatusLoading: false,
   settingsOpen: false,
   packageInfo: null,
   startupSettings: null,
@@ -76,8 +80,16 @@ const elements = {
   captureCodexCommand: document.querySelector('[data-command="capture-codex"]'),
   timelineCommand: document.querySelector('[data-command="timeline"]'),
   sessionCommand: document.querySelector('[data-command="session"]'),
-  intervalInput: document.querySelector("[data-interval-seconds]")
+  intervalInput: document.querySelector("[data-interval-seconds]"),
+  replayState: document.querySelector("[data-replay-state]"),
+  replayMetrics: document.querySelector("[data-replay-metrics]"),
+  replayDot: document.querySelector("[data-replay-dot]"),
+  replayLookback: document.querySelector("[data-replay-lookback]"),
+  replayToggle: document.querySelector('[data-replay-action="toggle"]'),
+  replaySave: document.querySelector('[data-replay-action="save"]')
 };
+
+let replayPollTimer = null;
 
 elements.captureView = document.querySelector("[data-capture-view]");
 elements.sessionView = document.querySelector("[data-session-view]");
@@ -267,6 +279,106 @@ async function toggleSession() {
   }
 }
 
+function replayStatusFrom(response) {
+  if (response?.Unavailable || response?.unavailable) return null;
+  return response?.Status || response?.status || response || null;
+}
+
+function replayManifestFrom(response) {
+  return response?.Manifest || response?.manifest || null;
+}
+
+function renderReplayBanner() {
+  const replay = state.instantReplay;
+  const running = Boolean(replay?.Running ?? replay?.running);
+  const frames = Number(replay?.FrameCount ?? replay?.frameCount ?? 0);
+  const seconds = Number(replay?.BufferedSeconds ?? replay?.bufferedSeconds ?? 0);
+  const bytes = Number(replay?.BufferBytes ?? replay?.bufferBytes ?? 0);
+  const lookback = Number(replay?.LookbackSeconds ?? replay?.lookbackSeconds ?? 30);
+  elements.replayState.textContent = running ? "On" : "Off";
+  elements.replayDot.classList.toggle("active", running);
+  elements.replayMetrics.textContent = replay
+    ? `${seconds.toFixed(1)} s buffered · ${frames} frames · ${formatBytes(bytes)}`
+    : "Host unavailable";
+  elements.replayLookback.value = String(lookback);
+  elements.replayLookback.disabled = state.replayBusy || running;
+  elements.replayToggle.disabled = state.replayBusy || !replay;
+  elements.replayToggle.textContent = state.replayBusy ? "Working..." : running ? "Stop replay" : "Start replay";
+  elements.replaySave.disabled = state.replayBusy || frames === 0;
+  elements.replaySave.textContent = state.replayBusy ? "Working..." : "Save replay";
+}
+
+async function loadReplayStatus({ silent = false } = {}) {
+  if (state.replayBusy || state.replayStatusLoading) return;
+  state.replayStatusLoading = true;
+  try {
+    const response = await window.winshots.getInstantReplayStatus();
+    state.instantReplay = replayStatusFrom(response);
+    state.replayUnavailableMessage = response?.Message || response?.message || "";
+  } catch (error) {
+    state.instantReplay = null;
+    state.replayUnavailableMessage = error.message || "Instant Replay host unavailable";
+    if (!silent && state.section === "sessions") {
+      elements.sync.textContent = error.message || "Instant Replay host unavailable";
+    }
+  } finally {
+    state.replayStatusLoading = false;
+  }
+  renderReplayBanner();
+}
+
+function startReplayPolling() {
+  if (replayPollTimer) return;
+  replayPollTimer = window.setInterval(() => {
+    if (state.section === "sessions" && !state.replayBusy && !state.replayStatusLoading) {
+      loadReplayStatus({ silent: true });
+    }
+  }, 2000);
+}
+
+function stopReplayPolling() {
+  if (!replayPollTimer) return;
+  window.clearInterval(replayPollTimer);
+  replayPollTimer = null;
+}
+
+async function runReplayAction(action) {
+  if (state.replayBusy) return;
+  state.replayBusy = true;
+  renderReplayBanner();
+  try {
+    const running = Boolean(state.instantReplay?.Running ?? state.instantReplay?.running);
+    let response;
+    if (action === "toggle") {
+      response = running
+        ? await window.winshots.stopInstantReplay()
+        : await window.winshots.startInstantReplay({
+            lookbackSeconds: Number(elements.replayLookback.value || 30),
+            intervalMs: 1000
+          });
+    } else {
+      response = await window.winshots.saveInstantReplay({
+        lookbackSeconds: Number(elements.replayLookback.value || 30)
+      });
+    }
+
+    state.instantReplay = replayStatusFrom(response);
+    const message = response?.Message || response?.message || (action === "save" ? "Instant Replay saved" : "Instant Replay updated");
+    elements.sync.textContent = message;
+    if (action === "save") {
+      const manifest = replayManifestFrom(response);
+      state.selectedSessionId = manifest?.Id || manifest?.id || state.selectedSessionId;
+      state.selectedFrameNumber = null;
+      await loadSessions(message);
+    }
+  } catch (error) {
+    elements.sync.textContent = error.message || "Instant Replay command failed";
+  } finally {
+    state.replayBusy = false;
+    renderReplayBanner();
+  }
+}
+
 function formatTime(capture) {
   const source = capture.timestampLocal || capture.timestampUtc;
   const match = String(source).match(/\b(\d{2}):(\d{2}):(\d{2})\b/);
@@ -431,7 +543,7 @@ function renderSessionBrowser() {
       <button type="button" class="session-item${active}" data-session-id="${escapeHtml(session.id)}">
         <strong>${escapeHtml(session.id)}</strong>
         <span>${escapeHtml(session.startedLocal || session.startedUtc || "Unknown time")}</span>
-        <small>${Number(session.capturedFrameCount || 0)} frames · ${escapeHtml(session.status || "incomplete")}</small>
+        <small>${Number(session.capturedFrameCount || 0)} frames · ${escapeHtml(session.source || session.status || "incomplete")}</small>
       </button>`;
   }).join("");
 
@@ -824,7 +936,7 @@ async function showSessions() {
   });
   renderAll();
   try {
-    await loadSessions();
+    await Promise.all([loadSessions(), loadReplayStatus()]);
   } catch (error) {
     elements.sync.textContent = error.message || "Session load failed";
     elements.sessionDetail.innerHTML = `<div class="empty-state"><strong>Session load failed</strong><span>${escapeHtml(error.message)}</span></div>`;
@@ -1198,6 +1310,12 @@ function bindEvents() {
       return;
     }
 
+    const replayAction = event.target.closest("[data-replay-action]");
+    if (replayAction) {
+      await runReplayAction(replayAction.dataset.replayAction);
+      return;
+    }
+
     const viewButton = event.target.closest("[data-view-mode]");
     if (viewButton) {
       setViewMode(viewButton.dataset.viewMode);
@@ -1362,6 +1480,8 @@ async function init() {
   applyStoredTheme();
   requestAnimationFrame(() => document.body.classList.add("theme-transitions"));
   bindEvents();
+  startReplayPolling();
+  window.addEventListener("beforeunload", stopReplayPolling, { once: true });
   window.winshots.onCapturesChanged(async () => {
     try {
       await loadCaptures("Synced just now");
@@ -1376,6 +1496,8 @@ async function init() {
     elements.sync.textContent = "Capture load failed";
     elements.rows.innerHTML = `<div class="empty-state"><strong>Capture load failed</strong><span>${escapeHtml(error.message)}</span></div>`;
   }
+
+  await loadReplayStatus();
 
   await waitForImages();
   requestAnimationFrame(() => window.winshots.notifyReady());

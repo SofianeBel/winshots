@@ -165,6 +165,12 @@ function normalizeSession(root, directoryPath, manifest = {}) {
     videoUrl: videoPath ? pathToFileURL(videoPath).href : "",
     videoError: manifest.VideoError || manifest.videoError || "",
     totalMs: Number(manifest.TotalMs ?? manifest.totalMs) || 0,
+    sessionType: manifest.SessionType || manifest.sessionType || "visual-session",
+    source: manifest.Source || manifest.source || "Visual Session",
+    lookbackSeconds: Number(manifest.LookbackSeconds ?? manifest.lookbackSeconds) || 0,
+    duplicateFrameCount: Number(manifest.DuplicateFrameCount ?? manifest.duplicateFrameCount) || 0,
+    ignoredFrameCount: Number(manifest.IgnoredFrameCount ?? manifest.ignoredFrameCount) || 0,
+    changeEventCount: Number(manifest.ChangeEventCount ?? manifest.changeEventCount) || 0,
     contextPath,
     context: contextPath ? safeReadText(contextPath, 80_000) : "",
     frames
@@ -210,7 +216,13 @@ function summarizeSession(root, directoryPath, manifest = {}) {
     videoPath,
     videoUrl: videoPath ? pathToFileURL(videoPath).href : "",
     videoError: manifest.VideoError || manifest.videoError || "",
-    totalMs: Number(manifest.TotalMs ?? manifest.totalMs) || 0
+    totalMs: Number(manifest.TotalMs ?? manifest.totalMs) || 0,
+    sessionType: manifest.SessionType || manifest.sessionType || "visual-session",
+    source: manifest.Source || manifest.source || "Visual Session",
+    lookbackSeconds: Number(manifest.LookbackSeconds ?? manifest.lookbackSeconds) || 0,
+    duplicateFrameCount: Number(manifest.DuplicateFrameCount ?? manifest.duplicateFrameCount) || 0,
+    ignoredFrameCount: Number(manifest.IgnoredFrameCount ?? manifest.ignoredFrameCount) || 0,
+    changeEventCount: Number(manifest.ChangeEventCount ?? manifest.changeEventCount) || 0
   };
 }
 
@@ -221,7 +233,7 @@ function sessionDirectories(root) {
 
   try {
     return fs.readdirSync(root, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
+      .filter((entry) => entry.isDirectory() && !entry.name.toLowerCase().endsWith(".partial"))
       .map((entry) => path.join(root, entry.name));
   } catch {
     return [];

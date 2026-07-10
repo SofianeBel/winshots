@@ -10,6 +10,7 @@ public sealed class HostCommandServer : IDisposable
 
     private readonly MainForm _mainForm;
     private readonly CancellationTokenSource _cancellation = new();
+    private readonly HostEndpointRegistry _endpointRegistry;
     private Task? _serverTask;
     private int _disposed;
 
@@ -17,6 +18,7 @@ public sealed class HostCommandServer : IDisposable
     {
         _mainForm = mainForm;
         PipeName = $"winshots-{Environment.ProcessId}-{Guid.NewGuid():N}";
+        _endpointRegistry = new HostEndpointRegistry(PipeName);
     }
 
     public string PipeName { get; }
@@ -44,6 +46,7 @@ public sealed class HostCommandServer : IDisposable
         }
 
         _cancellation.Dispose();
+        _endpointRegistry.Dispose();
     }
 
     private async Task RunAsync(CancellationToken cancellationToken)
@@ -55,7 +58,7 @@ public sealed class HostCommandServer : IDisposable
                 PipeDirection.InOut,
                 maxNumberOfServerInstances: 1,
                 PipeTransmissionMode.Byte,
-                PipeOptions.Asynchronous);
+                PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
 
             try
             {
@@ -113,6 +116,10 @@ public sealed class HostCommandServer : IDisposable
             "timeline.toggle" => TimelineToggleAsync(request),
             "session.start" => SessionStartAsync(request),
             "session.stop" => SessionStopAsync(),
+            "replay.status" => ReplayStatusAsync(),
+            "replay.start" => ReplayStartAsync(request),
+            "replay.stop" => ReplayStopAsync(),
+            "replay.save" => ReplaySaveAsync(request),
             "status" => StatusAsync(),
             _ => throw new InvalidOperationException($"Unsupported Winshots host command: {command}")
         };
@@ -141,6 +148,29 @@ public sealed class HostCommandServer : IDisposable
     private async Task<object?> SessionStopAsync()
     {
         return await _mainForm.StopVisualSessionForHostAsync().ConfigureAwait(false);
+    }
+
+    private async Task<object?> ReplayStatusAsync()
+    {
+        return await _mainForm.GetInstantReplayStatusForHostAsync().ConfigureAwait(false);
+    }
+
+    private async Task<object?> ReplayStartAsync(JsonElement request)
+    {
+        int lookbackSeconds = ReadOptionalInt(request, "lookbackSeconds") ?? 30;
+        int intervalMs = ReadOptionalInt(request, "intervalMs") ?? 1000;
+        return await _mainForm.StartInstantReplayForHostAsync(lookbackSeconds, intervalMs).ConfigureAwait(false);
+    }
+
+    private async Task<object?> ReplayStopAsync()
+    {
+        return await _mainForm.StopInstantReplayForHostAsync().ConfigureAwait(false);
+    }
+
+    private async Task<object?> ReplaySaveAsync(JsonElement request)
+    {
+        int? lookbackSeconds = ReadOptionalInt(request, "lookbackSeconds");
+        return await _mainForm.SaveInstantReplayForHostAsync(lookbackSeconds).ConfigureAwait(false);
     }
 
     private async Task<object?> StatusAsync()

@@ -23,7 +23,14 @@ public sealed record HostTimelineCommandResult(bool Running, string Message);
 
 public sealed record HostSessionCommandResult(bool Running, string? DirectoryPath, VisualSessionManifest? Manifest, string Message);
 
-public sealed record HostStatusCommandResult(bool SessionRunning, bool TimelineRunning, bool OverlayVisible, string OverlayText);
+public sealed record HostInstantReplayCommandResult(InstantReplayStatus Status, VisualSessionManifest? Manifest, string Message);
+
+public sealed record HostStatusCommandResult(
+    bool SessionRunning,
+    bool TimelineRunning,
+    bool OverlayVisible,
+    string OverlayText,
+    InstantReplayStatus InstantReplay);
 
 public sealed class MainForm : Form
 {
@@ -35,6 +42,7 @@ public sealed class MainForm : Form
     private readonly RecordingOverlayForm _overlay = new();
     private readonly System.Windows.Forms.Timer _targetPollTimer = new();
     private readonly System.Windows.Forms.Timer _timelineTimer = new();
+    private readonly InstantReplayService _instantReplay;
     private readonly HashSet<int> _excludedProcessIds = [Environment.ProcessId];
     private readonly List<string> _excludedProcessPathPrefixes = [];
 
@@ -61,6 +69,7 @@ public sealed class MainForm : Form
     public MainForm()
     {
         _workflow = new CaptureWorkflow(CapturePaths.DefaultRoot);
+        _instantReplay = new InstantReplayService();
         _settings = _settingsStore.Load();
 
         Text = "Winshots";
@@ -119,6 +128,7 @@ public sealed class MainForm : Form
             _overlay.Dispose();
             _targetPollTimer.Dispose();
             _timelineTimer.Dispose();
+            _instantReplay.Dispose();
             _notifyIcon.Dispose();
             if (_sessionRecorder?.IsRunning == true)
             {
@@ -184,13 +194,61 @@ public sealed class MainForm : Form
         });
     }
 
+    public Task<HostInstantReplayCommandResult> StartInstantReplayForHostAsync(int lookbackSeconds, int intervalMs)
+    {
+        return RunOnUiThreadAsync(() =>
+        {
+            InstantReplayStatus status = _instantReplay.Start(
+                () => SelectCaptureTarget(preferLastExternalWindow: true),
+                new InstantReplayOptions
+                {
+                    LookbackSeconds = lookbackSeconds,
+                    IntervalMs = intervalMs
+                });
+            SetStatus($"Instant Replay running: {status.LookbackSeconds}s lookback.");
+            return new HostInstantReplayCommandResult(status, null, _statusLabel.Text);
+        });
+    }
+
+    public Task<HostInstantReplayCommandResult> StopInstantReplayForHostAsync()
+    {
+        return RunOnUiThreadAsync(async () =>
+        {
+            InstantReplayStatus status = await _instantReplay.StopAsync();
+            SetStatus($"Instant Replay stopped: {status.FrameCount} frames buffered.");
+            return new HostInstantReplayCommandResult(status, null, _statusLabel.Text);
+        });
+    }
+
+    public Task<HostInstantReplayCommandResult> SaveInstantReplayForHostAsync(int? lookbackSeconds)
+    {
+        return RunOnUiThreadAsync(async () =>
+        {
+            SetStatus("Saving Instant Replay...");
+            VisualSessionManifest manifest = await Task.Run(() => _instantReplay.SaveReplay(lookbackSeconds));
+            InstantReplayStatus status = _instantReplay.GetStatus();
+            SetStatus($"Instant Replay saved: {manifest.CapturedFrameCount} frames. {manifest.DirectoryPath}");
+            return new HostInstantReplayCommandResult(status, manifest, _statusLabel.Text);
+        });
+    }
+
+    public Task<HostInstantReplayCommandResult> GetInstantReplayStatusForHostAsync()
+    {
+        return RunOnUiThreadAsync(() =>
+        {
+            InstantReplayStatus status = _instantReplay.GetStatus();
+            return new HostInstantReplayCommandResult(status, null, _statusLabel.Text);
+        });
+    }
+
     public Task<HostStatusCommandResult> GetHostStatusAsync()
     {
         return RunOnUiThreadAsync(() => new HostStatusCommandResult(
             _sessionRecorder?.IsRunning == true,
             _timelineTimer.Enabled,
             _overlay.Visible,
-            _overlay.Visible ? _overlay.StatusText : string.Empty));
+            _overlay.Visible ? _overlay.StatusText : string.Empty,
+            _instantReplay.GetStatus()));
     }
 
     private void BuildUi()

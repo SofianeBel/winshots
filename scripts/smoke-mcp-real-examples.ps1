@@ -66,7 +66,7 @@ function Invoke-McpBatch {
             capabilities = @{}
             clientInfo = @{
                 name = "winshots-real-examples-smoke"
-                version = "1.1.0"
+                version = "1.2.0"
             }
         }
     }

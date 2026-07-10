@@ -26,6 +26,12 @@ internal static class Program
             return;
         }
 
+        if (args.Length > 0 && string.Equals(args[0], "instant-replay", StringComparison.OrdinalIgnoreCase))
+        {
+            Environment.ExitCode = RunInstantReplayCommand(args[1..]);
+            return;
+        }
+
         bool forceWinForms = args.Length > 0 && string.Equals(args[0], "--winforms", StringComparison.OrdinalIgnoreCase);
         if (forceWinForms)
         {
@@ -236,6 +242,63 @@ internal static class Program
         }
     }
 
+    private static int RunInstantReplayCommand(string[] args)
+    {
+        try
+        {
+            if (args.Length == 0)
+            {
+                throw new ArgumentException("Use instant-replay status, start, stop, or save.");
+            }
+
+            string action = args[0].ToLowerInvariant();
+            string command = action switch
+            {
+                "status" => "replay.status",
+                "start" => "replay.start",
+                "stop" => "replay.stop",
+                "save" => "replay.save",
+                _ => throw new ArgumentException("Use instant-replay status, start, stop, or save.")
+            };
+            int? lookbackSeconds = null;
+            int? intervalMs = null;
+            for (int i = 1; i < args.Length; i++)
+            {
+                if (string.Equals(args[i], "--lookback-seconds", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+                {
+                    lookbackSeconds = int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture);
+                }
+                else if (string.Equals(args[i], "--interval-ms", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+                {
+                    intervalMs = int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture);
+                }
+            }
+
+            var payload = new Dictionary<string, object?>();
+            if (lookbackSeconds is not null)
+            {
+                payload["lookbackSeconds"] = lookbackSeconds;
+            }
+
+            if (intervalMs is not null)
+            {
+                payload["intervalMs"] = intervalMs;
+            }
+
+            System.Text.Json.JsonElement result = HostCommandClient.SendAsync(
+                command,
+                payload,
+                action == "save" ? TimeSpan.FromSeconds(60) : TimeSpan.FromSeconds(10)).GetAwaiter().GetResult();
+            Console.WriteLine(result.GetRawText());
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return 1;
+        }
+    }
+
     private static IntPtr SelectCliCaptureTarget(HashSet<int> excludedProcessIds)
     {
         IntPtr foreground = NativeMethods.GetForegroundWindow();
@@ -333,7 +396,7 @@ internal static class Program
     private static void ReportMissingElectronUi()
     {
         const string message =
-            "The Winshots Electron UI was not found. Extract the full winshots-1.1.0-win-x64.zip package or run with --winforms to open the legacy fallback.";
+            "The Winshots Electron UI was not found. Extract the full winshots-1.2.0-win-x64.zip package or run with --winforms to open the legacy fallback.";
 
         try
         {

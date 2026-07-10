@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using Winshots.App.Capture;
 using Winshots.App.Windows;
+using Winshots.App.Host;
 
 _ = NativeMethods.TryEnablePerMonitorV2DpiAwareness();
 
@@ -173,6 +174,43 @@ public static class WinshotsTools
         }, JsonOptions);
     }
 
+    [McpServerTool, Description("Read status for the single Instant Replay buffer owned by the running Winshots host.")]
+    public static string GetInstantReplayStatus()
+    {
+        return SendReplayHostCommand("replay.status");
+    }
+
+    [McpServerTool, Description("Start the single local Instant Replay buffer owned by the running Winshots host.")]
+    public static string StartInstantReplay(
+        [Description("Replay lookback in seconds. The host clamps this between 5 and 120.")] int lookbackSeconds = 30,
+        [Description("Sampling interval in milliseconds. The host clamps this between 250 and 5000.")] int intervalMs = 1000)
+    {
+        return SendReplayHostCommand("replay.start", new Dictionary<string, object?>
+        {
+            ["lookbackSeconds"] = lookbackSeconds,
+            ["intervalMs"] = intervalMs
+        });
+    }
+
+    [McpServerTool, Description("Stop sampling for the single Instant Replay buffer owned by the running Winshots host. Retained frames stay local and can still be saved.")]
+    public static string StopInstantReplay()
+    {
+        return SendReplayHostCommand("replay.stop");
+    }
+
+    [McpServerTool, Description("Save recent retained Instant Replay frames as an autonomous local Winshots session through the running host.")]
+    public static string SaveInstantReplay(
+        [Description("Optional number of recent seconds to save, bounded by the active host lookback.")] int? lookbackSeconds = null)
+    {
+        var payload = new Dictionary<string, object?>();
+        if (lookbackSeconds is not null)
+        {
+            payload["lookbackSeconds"] = lookbackSeconds;
+        }
+
+        return SendReplayHostCommand("replay.save", payload, TimeSpan.FromSeconds(60));
+    }
+
     [McpServerTool, Description("Start a local visual debugging session that captures screenshot frames plus UI Automation context for Codex.")]
     public static string StartVisualSession(
         [Description("Optional session root. Defaults to the user's Documents\\Winshots\\sessions folder.")] string? outputRoot = null,
@@ -290,6 +328,15 @@ public static class WinshotsTools
         return string.IsNullOrWhiteSpace(outputRoot)
             ? CapturePaths.DefaultRoot
             : Path.GetFullPath(outputRoot);
+    }
+
+    private static string SendReplayHostCommand(
+        string command,
+        IReadOnlyDictionary<string, object?>? payload = null,
+        TimeSpan? timeout = null)
+    {
+        JsonElement result = HostCommandClient.SendAsync(command, payload, timeout).GetAwaiter().GetResult();
+        return result.GetRawText();
     }
 
     private static string ResolveSessionRoot(string? outputRoot)

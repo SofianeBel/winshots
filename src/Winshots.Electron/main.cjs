@@ -491,6 +491,33 @@ async function stopVisualSession() {
   };
 }
 
+async function getInstantReplayStatus() {
+  try {
+    return await requestHost("replay.status", {}, 10_000);
+  } catch (error) {
+    return {
+      unavailable: true,
+      message: error.message || "Winshots host is not available."
+    };
+  }
+}
+
+function startInstantReplay(options = {}) {
+  return requestHost("replay.start", {
+    lookbackSeconds: Math.max(5, Math.min(120, Number(options.lookbackSeconds || 30))),
+    intervalMs: Math.max(250, Math.min(5000, Number(options.intervalMs || 1000)))
+  }, 10_000);
+}
+
+function stopInstantReplay() {
+  return requestHost("replay.stop", {}, 10_000);
+}
+
+function saveInstantReplay(options = {}) {
+  const lookbackSeconds = Number(options.lookbackSeconds);
+  return requestHost("replay.save", Number.isFinite(lookbackSeconds) ? { lookbackSeconds } : {}, 60_000);
+}
+
 async function toggleTimelineCommand(options = {}) {
   const intervalMs = Math.max(1000, Number(options.intervalMs || 1000));
   return requestHost("timeline.toggle", { intervalMs }, 30_000);
@@ -1499,6 +1526,14 @@ ipcMain.handle("timeline:toggle", (_event, options) => toggleTimelineCommand(opt
 ipcMain.handle("sessions:start", (_event, options) => startVisualSession(options));
 
 ipcMain.handle("sessions:stop", () => stopVisualSession());
+
+ipcMain.handle("replay:status", () => getInstantReplayStatus());
+
+ipcMain.handle("replay:start", (_event, options) => startInstantReplay(options));
+
+ipcMain.handle("replay:stop", () => stopInstantReplay());
+
+ipcMain.handle("replay:save", (_event, options) => saveInstantReplay(options));
 
 ipcMain.handle("sessions:list", () => listSessions(resolveSessionRoot()));
 

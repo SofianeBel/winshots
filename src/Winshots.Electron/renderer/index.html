@@ -139,15 +139,28 @@
             </div>
           </section>
 
-          <section class="session-browser" aria-label="Local visual sessions" data-session-view hidden>
-            <div class="session-list-panel">
-              <header>
-                <strong>Local sessions</strong>
-                <span id="session-count">0</span>
-              </header>
-              <div id="session-list" class="session-list"></div>
+          <section class="session-workspace" data-session-view hidden>
+            <section class="replay-banner" aria-label="Instant Replay controls">
+              <div class="replay-summary">
+                <div><span class="status-dot" data-replay-dot></span><strong>Instant Replay</strong><span class="replay-state" data-replay-state aria-live="polite">Off</span></div>
+                <span data-replay-metrics aria-live="polite">Checking local buffer...</span>
+              </div>
+              <div class="replay-actions">
+                <label class="replay-lookback">Lookback <input type="number" min="5" max="120" step="5" value="30" data-replay-lookback /> s</label>
+                <button type="button" class="command-button" data-replay-action="toggle">Start replay</button>
+                <button type="button" class="command-button primary" data-replay-action="save" disabled>Save replay</button>
+              </div>
+            </section>
+            <div class="session-browser" aria-label="Local visual sessions">
+              <div class="session-list-panel">
+                <header>
+                  <strong>Local sessions</strong>
+                  <span id="session-count">0</span>
+                </header>
+                <div id="session-list" class="session-list"></div>
+              </div>
+              <div id="session-detail" class="session-detail"></div>
             </div>
-            <div id="session-detail" class="session-detail"></div>
           </section>
         </main>
 

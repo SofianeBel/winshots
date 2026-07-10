@@ -1,6 +1,7 @@
 param(
     [switch]$Capture,
     [switch]$Session,
+    [switch]$Replay,
     [string]$Output = "artifacts\mcp-captures"
 )
 
@@ -31,7 +32,7 @@ $messages = @(
             capabilities = @{}
             clientInfo = @{
                 name = "winshots-smoke"
-                version = "1.1.0"
+                version = "1.2.0"
             }
         }
     }
@@ -78,6 +79,17 @@ elseif ($Session) {
                 outputRoot = $outputRoot
                 maxCount = 1
             }
+        }
+    }
+}
+elseif ($Replay) {
+    $messages += @{
+        jsonrpc = "2.0"
+        id = 2
+        method = "tools/call"
+        params = @{
+            name = "get_instant_replay_status"
+            arguments = @{}
         }
     }
 }
@@ -129,7 +141,7 @@ if ($process.ExitCode -ne 0) {
     throw $stderr
 }
 
-if (-not $Capture -and -not $Session -and $stdout -notmatch "capture_active_window") {
+if (-not $Capture -and -not $Session -and -not $Replay -and $stdout -notmatch "capture_active_window") {
     throw "MCP smoke did not expose capture_active_window."
 }
 
@@ -183,12 +195,19 @@ elseif ($Session) {
 
     Write-Host "MCP session OK: $($latest.FullName)"
 }
+elseif ($Replay) {
+    if ($stdout -notmatch "FrameCount") {
+        throw "MCP Instant Replay status did not include buffer counters."
+    }
+
+    Write-Host "MCP Instant Replay host bridge OK"
+}
 else {
-    foreach ($toolName in @("list_windows", "capture_window", "capture_active_window", "list_recent_captures", "read_capture_context", "start_visual_session", "stop_visual_session", "list_visual_sessions", "read_visual_session_context")) {
+    foreach ($toolName in @("list_windows", "capture_window", "capture_active_window", "list_recent_captures", "read_capture_context", "start_visual_session", "stop_visual_session", "list_visual_sessions", "read_visual_session_context", "get_instant_replay_status", "start_instant_replay", "stop_instant_replay", "save_instant_replay")) {
         if ($stdout -notmatch $toolName) {
             throw "MCP smoke did not expose $toolName."
         }
     }
 
-    Write-Host "MCP tools OK: window targeting, capture, context, and visual session tools"
+    Write-Host "MCP tools OK: window targeting, capture, context, visual session, and Instant Replay host tools"
 }
