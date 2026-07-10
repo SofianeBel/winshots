@@ -65,6 +65,7 @@ internal static class Program
 
             if (Directory.Exists(installRoot))
             {
+                StopInstalledProcesses(installRoot);
                 Directory.Delete(installRoot, recursive: true);
             }
 
@@ -94,6 +95,50 @@ internal static class Program
         }
 
         return 0;
+    }
+
+    private static void StopInstalledProcesses(string installRoot)
+    {
+        using Process currentProcess = Process.GetCurrentProcess();
+        var installedProcesses = new List<Process>();
+
+        foreach (Process process in Process.GetProcesses())
+        {
+            try
+            {
+                string? executablePath = process.MainModule?.FileName;
+                if (process.Id != currentProcess.Id &&
+                    !string.IsNullOrWhiteSpace(executablePath) &&
+                    IsUnderRoot(installRoot, executablePath))
+                {
+                    installedProcesses.Add(process);
+                    process.CloseMainWindow();
+                    continue;
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                // The process exited while it was being inspected.
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                // Processes outside this user's session may not expose their executable path.
+            }
+
+            process.Dispose();
+        }
+
+        foreach (Process process in installedProcesses)
+        {
+            using (process)
+            {
+                if (!process.WaitForExit(3000))
+                {
+                    process.Kill(entireProcessTree: true);
+                    process.WaitForExit(5000);
+                }
+            }
+        }
     }
 
     private static int Uninstall(InstallerOptions options)
