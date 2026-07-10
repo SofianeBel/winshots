@@ -1,6 +1,6 @@
 ---
 name: winshots-visual-session
-description: Use when Codex needs a short local Winshots visual debugging session over time, including repeated screenshot frames, UI Automation context, and optional video; especially for reproducing transient UI bugs, animation/state changes, navigation flows, or interactions where a single screenshot is insufficient. Requires Winshots MCP tools such as start_visual_session, stop_visual_session, list_visual_sessions, and read_visual_session_context.
+description: Use when Codex needs a short local Winshots visual debugging session over time or needs to save recent frames from the host-owned Instant Replay buffer. Requires Winshots MCP visual session or Instant Replay tools.
 ---
 
 # Winshots Visual Session
@@ -32,6 +32,9 @@ Use a visual session when the important evidence changes over time. Keep session
 - `stop_visual_session`: finalize `session.json`, `context.md`, `frames.jsonl`, and optional `video.mp4`.
 - `list_visual_sessions`: find recent saved sessions.
 - `read_visual_session_context`: read the Markdown session summary by id or directory.
+- `get_instant_replay_status`: inspect the bounded buffer owned by the running Winshots host.
+- `start_instant_replay` / `stop_instant_replay`: control host sampling without creating a second MCP buffer.
+- `save_instant_replay`: publish recent retained frames as an autonomous local session.
 
 ## Guardrails
 
@@ -39,6 +42,7 @@ Use a visual session when the important evidence changes over time. Keep session
 - Do not leave sessions running after the evidence has been captured.
 - Avoid long recordings unless the user explicitly needs them.
 - Do not claim captures are uploaded; Winshots stores them locally.
+- Instant Replay requires the live Winshots host descriptor; never emulate it with an MCP-owned buffer.
 
 ## Local Repo Checks
 
@@ -47,4 +51,5 @@ When editing Winshots session behavior, validate from the repo:
 ```powershell
 dotnet build .\Winshots.slnx
 .\scripts\smoke-mcp.ps1 -Session
+.\scripts\smoke-mcp.ps1 -Replay
 ```

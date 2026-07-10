@@ -1,6 +1,6 @@
 # Contributing
 
-Winshots is a local Windows 1.0 release. Keep contributions small, verifiable, and aligned with the current product surface.
+Winshots is a local Windows 1.2 release. Keep contributions small, verifiable, and aligned with the current product surface.
 
 ## Development Setup
 
@@ -42,7 +42,7 @@ npm run ui:smoke
 For installer or release workflow changes:
 
 ```powershell
-.\scripts\build-release.ps1 -Version 1.1.0
+.\scripts\build-release.ps1 -Version 1.2.0
 ```
 
 ## Contribution Rules

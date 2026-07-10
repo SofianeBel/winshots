@@ -4,9 +4,20 @@ Winshots is a local Windows capture tool for Codex debugging.
 
 It captures a Windows app screenshot plus best-effort Windows UI Automation text, stores everything locally, and offers manual capture, periodic capture, targeted MCP capture, and browsable visual debugging sessions.
 
-Winshots is Windows-only and currently a 1.1 local release.
+Winshots is Windows-only and currently a 1.2 local release.
 
-## V1.1 Features
+## V1.2 Features
+
+- Instant Replay keeps a local, circular buffer of recent useful screenshots (30 seconds by default, configurable from 5 to 120 seconds)
+- Event-aware retention always keeps window/process/title changes; dHash removes low-value same-context duplicates, with periodic stable-screen keyframes
+- Replay sampling yields quickly when another capture owns the shared capture gate and records busy/failure diagnostics instead of blocking manual capture
+- The buffer is strictly bounded to at most 480 retained frames and 256 MB of frame artifacts; its `buffer.json` manifest has separately bounded frame/event lists
+- `Save replay` atomically publishes autonomous frames, metadata, context, and `session.json` into the local Sessions library while the buffer remains reusable
+- Electron provides a compact Instant Replay status/control banner in Sessions
+- CLI and MCP replay commands control the single buffer owned by the running Winshots host through a validated local ephemeral descriptor
+- No upload, telemetry, cloud service, or required ffmpeg
+
+V1.2 retains the V1.1 capture and visual session features:
 
 - Configurable global shortcuts:
   - Capture: `Ctrl+Shift+Space`
@@ -52,7 +63,7 @@ If Codex App is not already running, Windows refuses to focus it, or Winshots ca
 To install Winshots like a normal Windows app, run:
 
 ```text
-winshots-1.1.0-win-x64-setup.exe
+winshots-1.2.0-win-x64-setup.exe
 ```
 
 The setup installs the Windows app, Electron review UI, MCP server, Start Menu shortcuts, and an Apps & Features uninstaller under:
@@ -70,7 +81,7 @@ Codex plugin registration is intentionally separate so a locked Codex plugin cac
 For portable use without installation, download and extract:
 
 ```text
-winshots-1.1.0-win-x64.zip
+winshots-1.2.0-win-x64.zip
 ```
 
 Then run:
@@ -82,14 +93,14 @@ Then run:
 Build the installer package locally with:
 
 ```powershell
-.\scripts\build-release.ps1 -Version 1.1.0
+.\scripts\build-release.ps1 -Version 1.2.0
 ```
 
 The release files are written to:
 
 ```text
-artifacts\release\winshots-1.1.0-win-x64-setup.exe
-artifacts\release\winshots-1.1.0-win-x64.zip
+artifacts\release\winshots-1.2.0-win-x64-setup.exe
+artifacts\release\winshots-1.2.0-win-x64.zip
 ```
 
 ## Run
@@ -143,6 +154,19 @@ From the app, use `Start session` / `Stop session`. From the CLI:
 dotnet run --project .\src\Winshots.App\Winshots.App.csproj -- record-session --duration-seconds 5 --interval-ms 1000
 ```
 
+## Instant Replay
+
+Start Winshots normally so the C# host owns the single local buffer. In Electron, open Sessions and use the Instant Replay banner. The same host can be controlled from the CLI:
+
+```powershell
+Winshots.App.exe instant-replay status
+Winshots.App.exe instant-replay start --lookback-seconds 30 --interval-ms 1000
+Winshots.App.exe instant-replay save --lookback-seconds 20
+Winshots.App.exe instant-replay stop
+```
+
+The temporary buffer stays under `%LOCALAPPDATA%\Winshots\instant-replay`; saved replays are copied atomically under `%USERPROFILE%\Documents\Winshots\sessions`. All files remain local unless the user explicitly shares them.
+
 ## Codex MCP Connection
 
 Build once:
@@ -178,6 +202,10 @@ The MCP server exposes:
 - `stop_visual_session`
 - `list_visual_sessions`
 - `read_visual_session_context`
+- `get_instant_replay_status`
+- `start_instant_replay`
+- `stop_instant_replay`
+- `save_instant_replay`
 
 Smoke-test the MCP server:
 

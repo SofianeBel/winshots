@@ -151,6 +151,7 @@ $releaseNotes = @"
 - The setup installs the app, creates Start Menu shortcuts, and registers an Apps & Features uninstaller.
 - Codex plugin registration is separate so a locked Codex plugin cache cannot break the Winshots app install.
 - Captures and sessions stay local under the user's Documents folder unless the user shares them explicitly.
+- Instant Replay keeps a bounded temporary local buffer and saves autonomous sessions without requiring ffmpeg.
 "@
 Set-Content -Path (Join-Path $outputRootPath "RELEASE_NOTES.md") -Value $releaseNotes -Encoding UTF8
 

@@ -3,7 +3,7 @@
 For normal installation, run the setup executable from the release:
 
 ```text
-winshots-1.1.0-win-x64-setup.exe
+winshots-1.2.0-win-x64-setup.exe
 ```
 
 The setup installs Winshots under the local user profile, creates Start Menu shortcuts, and registers an Apps & Features uninstaller.
@@ -30,12 +30,14 @@ The default install location is:
 
 The local install copies the Windows app, the MCP server, and the Codex plugin files. It does not touch Codex plugin cache by default.
 
-Captures and visual sessions are not stored in the install directory. They stay under:
+Captures and saved visual/Instant Replay sessions are not stored in the install directory. They stay under:
 
 ```text
 %USERPROFILE%\Documents\Winshots\captures
 %USERPROFILE%\Documents\Winshots\sessions
 ```
+
+The live Instant Replay buffer is local, temporary, and bounded under `%LOCALAPPDATA%\Winshots\instant-replay`. Saving a replay copies autonomous artifacts into the Sessions folder.
 
 To refresh the Codex plugin after closing Codex:
 
