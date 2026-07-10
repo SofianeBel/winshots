@@ -1,0 +1,13 @@
+interface:
+  display_name: "Winshots Agent Watch"
+  short_description: "Wait for bounded local Windows conditions"
+  default_prompt: "Use $winshots-agent-watch to wait for this Windows app condition and report deterministic diagnostics."
+  brand_color: "#2563EB"
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "winshots"
+      description: "Local Winshots MCP stdio server"
+      transport: "stdio"
+policy:
+  allow_implicit_invocation: true

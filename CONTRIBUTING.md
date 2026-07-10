@@ -1,6 +1,6 @@
 # Contributing
 
-Winshots is a local Windows 1.2 release. Keep contributions small, verifiable, and aligned with the current product surface.
+Winshots is a local Windows 1.3 release. Keep contributions small, verifiable, and aligned with the current product surface.
 
 ## Development Setup
 
@@ -31,6 +31,8 @@ For capture and MCP changes:
 ```powershell
 .\scripts\smoke-capture.ps1
 .\scripts\smoke-mcp.ps1
+.\scripts\smoke-mcp.ps1 -AgentWatch
+.\scripts\smoke-agent-watch.ps1
 ```
 
 For Electron UI changes:
@@ -42,7 +44,7 @@ npm run ui:smoke
 For installer or release workflow changes:
 
 ```powershell
-.\scripts\build-release.ps1 -Version 1.2.0
+.\scripts\build-release.ps1 -Version 1.3.0
 ```
 
 ## Contribution Rules

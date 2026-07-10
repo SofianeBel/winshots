@@ -4,9 +4,20 @@ Winshots is a local Windows capture tool for Codex debugging.
 
 It captures a Windows app screenshot plus best-effort Windows UI Automation text, stores everything locally, and offers manual capture, periodic capture, targeted MCP capture, and browsable visual debugging sessions.
 
-Winshots is Windows-only and currently a 1.2 local release.
+Winshots is Windows-only and currently a 1.3 local release.
 
-## V1.2 Features
+## V1.3 Agent Watch
+
+- Five bounded MCP waits for local Windows automation: `wait_for_window`, `wait_for_text`, `wait_for_change`, `wait_for_disappear`, and `wait_for_stable`
+- Deterministic results distinguish `succeeded`, `timed_out`, and `cancelled`, with duration, frames observed, comparisons, reason, and every applied bound
+- Standard MCP request cancellation is honored; timeouts clamp to 100-300000 ms and polling clamps to 100-5000 ms
+- Text waits inspect full local Windows UI Automation context without OCR; only a bounded preview is returned
+- Visual change/stability reuse the capture pipeline and perceptual dHash, while keeping screenshots, context, and metadata local
+- Disappearance requires the target to have been observed first; stability is measured as a bounded duration against a fixed baseline
+
+See [Agent Watch MCP reference and workflows](docs/agent-watch.md) for complete input/output schemas.
+
+V1.3 retains the V1.2 Instant Replay features:
 
 - Instant Replay keeps a local, circular buffer of recent useful screenshots (30 seconds by default, configurable from 5 to 120 seconds)
 - Event-aware retention always keeps window/process/title changes; dHash removes low-value same-context duplicates, with periodic stable-screen keyframes
@@ -17,7 +28,7 @@ Winshots is Windows-only and currently a 1.2 local release.
 - CLI and MCP replay commands control the single buffer owned by the running Winshots host through a validated local ephemeral descriptor
 - No upload, telemetry, cloud service, or required ffmpeg
 
-V1.2 retains the V1.1 capture and visual session features:
+It also retains the V1.1 capture and visual session features:
 
 - Configurable global shortcuts:
   - Capture: `Ctrl+Shift+Space`
@@ -63,7 +74,7 @@ If Codex App is not already running, Windows refuses to focus it, or Winshots ca
 To install Winshots like a normal Windows app, run:
 
 ```text
-winshots-1.2.0-win-x64-setup.exe
+winshots-1.3.0-win-x64-setup.exe
 ```
 
 The setup installs the Windows app, Electron review UI, MCP server, Start Menu shortcuts, and an Apps & Features uninstaller under:
@@ -81,7 +92,7 @@ Codex plugin registration is intentionally separate so a locked Codex plugin cac
 For portable use without installation, download and extract:
 
 ```text
-winshots-1.2.0-win-x64.zip
+winshots-1.3.0-win-x64.zip
 ```
 
 Then run:
@@ -93,14 +104,14 @@ Then run:
 Build the installer package locally with:
 
 ```powershell
-.\scripts\build-release.ps1 -Version 1.2.0
+.\scripts\build-release.ps1 -Version 1.3.0
 ```
 
 The release files are written to:
 
 ```text
-artifacts\release\winshots-1.2.0-win-x64-setup.exe
-artifacts\release\winshots-1.2.0-win-x64.zip
+artifacts\release\winshots-1.3.0-win-x64-setup.exe
+artifacts\release\winshots-1.3.0-win-x64.zip
 ```
 
 ## Run
@@ -143,6 +154,8 @@ dotnet test .\Winshots.slnx --no-build
 .\scripts\smoke-capture.ps1
 .\scripts\measure-capture.ps1
 .\scripts\smoke-mcp.ps1 -Session
+.\scripts\smoke-mcp.ps1 -AgentWatch
+.\scripts\smoke-agent-watch.ps1
 .\scripts\smoke-mcp-real-examples.ps1 -OpenWebExamples
 ```
 
@@ -189,6 +202,7 @@ command = "dotnet"
 args = ["<REPO_ROOT>/src/Winshots.Mcp/bin/Debug/net8.0-windows/Winshots.Mcp.dll"]
 type = "stdio"
 startup_timeout_sec = 20.0
+tool_timeout_sec = 330
 ```
 
 The MCP server exposes:
@@ -206,6 +220,11 @@ The MCP server exposes:
 - `start_instant_replay`
 - `stop_instant_replay`
 - `save_instant_replay`
+- `wait_for_window`
+- `wait_for_text`
+- `wait_for_change`
+- `wait_for_disappear`
+- `wait_for_stable`
 
 Smoke-test the MCP server:
 
@@ -213,6 +232,7 @@ Smoke-test the MCP server:
 .\scripts\smoke-mcp.ps1
 .\scripts\smoke-mcp.ps1 -Capture
 .\scripts\smoke-mcp.ps1 -Session
+.\scripts\smoke-mcp.ps1 -AgentWatch
 .\scripts\smoke-mcp-real-examples.ps1 -OpenWebExamples
 ```
 
