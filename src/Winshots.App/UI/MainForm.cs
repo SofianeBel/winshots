@@ -13,6 +13,8 @@ public sealed record HostCaptureCommandResult(
     string? ScreenshotPath,
     string? TextPath,
     string? MetadataPath,
+    bool ImageCaptured,
+    string? ImageStatus,
     bool? CodexPasteSuccess,
     string? CodexPasteMessage,
     string Message);
@@ -385,14 +387,14 @@ public sealed class MainForm : Form
     {
         if (_isCapturing)
         {
-            return new HostCaptureCommandResult(null, null, null, null, null, null, null, "Capture already running.");
+            return new HostCaptureCommandResult(null, null, null, null, null, false, null, null, null, "Capture already running.");
         }
 
         IntPtr hwnd = SelectCaptureTarget(preferLastExternalWindow);
         if (!NativeMethods.IsUsableCaptureTarget(hwnd))
         {
             SetStatus("No capture target. Focus another window, then use the hotkey or Capture now.");
-            return new HostCaptureCommandResult(null, null, null, null, null, null, null, _statusLabel.Text);
+            return new HostCaptureCommandResult(null, null, null, null, null, false, null, null, null, _statusLabel.Text);
         }
 
         try
@@ -404,8 +406,13 @@ public sealed class MainForm : Form
 
             CaptureResult result = await Task.Run(() => _workflow.CaptureWindow(hwnd, reason));
             AddCapture(result, select: true);
+            bool imageCaptured = result.ImageCaptured;
             CodexPasteResult? paste = null;
-            if (pasteToCodex)
+            if (!imageCaptured)
+            {
+                SetStatus($"Capture image {result.ImageStatus}: {result.Metadata.Diagnostics?.Image.Detail}");
+            }
+            else if (pasteToCodex)
             {
                 paste = PasteCaptureToCodex(result, showCodexFallbackDialog);
             }
@@ -417,9 +424,11 @@ public sealed class MainForm : Form
             return new HostCaptureCommandResult(
                 result.Metadata.Id,
                 result.DirectoryPath,
-                result.ScreenshotPath,
+                result.AvailableScreenshotPath,
                 result.TextPath,
                 result.MetadataPath,
+                result.ImageCaptured,
+                result.ImageStatus,
                 paste?.Success,
                 paste?.Message,
                 _statusLabel.Text);
@@ -428,7 +437,7 @@ public sealed class MainForm : Form
         {
             SetStatus($"Capture failed: {ex.Message}");
             _contextBox.Text = ex.ToString();
-            return new HostCaptureCommandResult(null, null, null, null, null, null, null, _statusLabel.Text);
+            return new HostCaptureCommandResult(null, null, null, null, null, false, null, null, null, _statusLabel.Text);
         }
         finally
         {

@@ -15,4 +15,5 @@ public sealed record CaptureMetadata
     public required string TextPath { get; init; }
     public required int ExtractedTextLength { get; init; }
     public CaptureMetrics? Metrics { get; init; }
+    public CaptureDiagnostics? Diagnostics { get; init; }
 }

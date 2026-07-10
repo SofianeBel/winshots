@@ -37,6 +37,9 @@ public static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint dwAffinity);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetProcessDpiAwarenessContext(IntPtr dpiContext);
+
     [DllImport("user32.dll")]
     private static extern bool IsWindowVisible(IntPtr hWnd);
 
@@ -71,6 +74,11 @@ public static class NativeMethods
         }, IntPtr.Zero);
 
         return windows;
+    }
+
+    public static bool TryEnablePerMonitorV2DpiAwareness()
+    {
+        return SetProcessDpiAwarenessContext(new IntPtr(-4));
     }
 
     public static IReadOnlyList<WindowSnapshot> EnumerateCapturableWindows()

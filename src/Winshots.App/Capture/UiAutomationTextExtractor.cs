@@ -44,7 +44,9 @@ public sealed class UiAutomationTextExtractor
                     0,
                     false,
                     false,
-                    false));
+                    false,
+                    "failed",
+                    ex.Message));
             }
         })
         {
@@ -71,7 +73,9 @@ public sealed class UiAutomationTextExtractor
             0,
             false,
             false,
-            true);
+            true,
+            "timed-out",
+            status);
     }
 
     private TextExtractionResult ExtractResultCore(IntPtr hwnd, TimeSpan maxDuration)
@@ -91,12 +95,25 @@ public sealed class UiAutomationTextExtractor
                 AppendElement(AutomationElement.FromHandle(hwnd), builder, seen, 0, state);
             }
 
+            string text = TrimText(builder.ToString(), state);
+            string status = state.TimedOut
+                ? "timed-out"
+                : state.NodeLimitReached || state.TextLimitReached ? "partial" : "succeeded";
+            string? detail = status switch
+            {
+                "timed-out" => "UI Automation traversal reached the configured time limit.",
+                "partial" => "UI Automation context reached a node or text limit.",
+                _ => null
+            };
+
             return new TextExtractionResult(
-                TrimText(builder.ToString(), state),
+                text,
                 state.NodeCount,
                 state.NodeLimitReached,
                 state.TextLimitReached,
-                state.TimedOut);
+                state.TimedOut,
+                status,
+                detail);
         }
         catch (Exception ex) when (ex is ElementNotAvailableException or InvalidOperationException or COMException)
         {
@@ -105,7 +122,9 @@ public sealed class UiAutomationTextExtractor
                 state.NodeCount,
                 state.NodeLimitReached,
                 state.TextLimitReached,
-                state.TimedOut);
+                state.TimedOut,
+                "failed",
+                ex.Message);
         }
     }
 

@@ -14,4 +14,5 @@ public sealed record VisualSessionFrame
     public string? MetadataPath { get; init; }
     public CaptureBounds? Bounds { get; init; }
     public CaptureMetrics? Metrics { get; init; }
+    public CaptureDiagnostics? Diagnostics { get; init; }
 }

@@ -12,6 +12,8 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        ApplicationConfiguration.Initialize();
+
         if (args.Length > 0 && IsCaptureCommand(args[0]))
         {
             Environment.ExitCode = RunCaptureOnce(args[0], args[1..]);
@@ -35,7 +37,6 @@ internal static class Program
             return;
         }
 
-        ApplicationConfiguration.Initialize();
         Application.Run(new MainForm());
     }
 
@@ -95,7 +96,8 @@ internal static class Program
 
             var workflow = new CaptureWorkflow(outputRoot);
             CaptureResult result = workflow.CaptureWindow(hwnd, reason);
-            CodexPasteResult? paste = pasteToCodex ? CodexChatPaster.TryPasteCapture(result) : null;
+            bool imageCaptured = result.ImageCaptured;
+            CodexPasteResult? paste = pasteToCodex && imageCaptured ? CodexChatPaster.TryPasteCapture(result) : null;
 
             if (json)
             {
@@ -103,7 +105,9 @@ internal static class Program
                 {
                     result.Metadata.Id,
                     result.DirectoryPath,
-                    result.ScreenshotPath,
+                    ScreenshotPath = result.AvailableScreenshotPath,
+                    ImageCaptured = result.ImageCaptured,
+                    ImageStatus = result.ImageStatus,
                     result.TextPath,
                     result.MetadataPath,
                     CodexPasteSuccess = paste?.Success,
@@ -119,7 +123,12 @@ internal static class Program
                 }
             }
 
-            return 0;
+            if (!imageCaptured)
+            {
+                Console.Error.WriteLine($"Capture image {result.ImageStatus}: {result.Metadata.Diagnostics?.Image.Detail}");
+            }
+
+            return imageCaptured ? 0 : 1;
         }
         catch (Exception ex)
         {
@@ -261,8 +270,6 @@ internal static class Program
 
     private static int RunElectronHost(string[] args)
     {
-        ApplicationConfiguration.Initialize();
-
         using var mainForm = new MainForm();
         _ = mainForm.Handle;
 
@@ -326,7 +333,7 @@ internal static class Program
     private static void ReportMissingElectronUi()
     {
         const string message =
-            "The Winshots Electron UI was not found. Extract the full winshots-1.0.2-win-x64.zip package or run with --winforms to open the legacy fallback.";
+            "The Winshots Electron UI was not found. Extract the full winshots-1.1.0-win-x64.zip package or run with --winforms to open the legacy fallback.";
 
         try
         {

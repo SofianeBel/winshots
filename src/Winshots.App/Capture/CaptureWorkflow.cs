@@ -78,7 +78,7 @@ public sealed class CaptureWorkflow
         WindowSnapshot window = NativeMethods.GetWindowSnapshot(hwnd);
 
         var screenshotStopwatch = Stopwatch.StartNew();
-        CaptureBounds bounds = WindowScreenshot.Save(hwnd, screenshotPath);
+        ScreenshotCaptureResult screenshot = WindowScreenshot.Save(hwnd, screenshotPath);
         screenshotStopwatch.Stop();
 
         long screenshotBytes = File.Exists(screenshotPath) ? new FileInfo(screenshotPath).Length : 0;
@@ -98,7 +98,7 @@ public sealed class CaptureWorkflow
             ProcessName = window.ProcessName,
             ProcessId = window.ProcessId,
             WindowHandle = $"0x{hwnd.ToInt64():X}",
-            Bounds = bounds,
+            Bounds = screenshot.Bounds,
             ScreenshotPath = screenshotPath,
             TextPath = textPath,
             ExtractedTextLength = extraction.Text.Length,
@@ -112,6 +112,15 @@ public sealed class CaptureWorkflow
                 AutomationNodeLimitReached = extraction.NodeLimitReached,
                 AutomationTextLimitReached = extraction.TextLimitReached,
                 AutomationTimedOut = extraction.TimedOut
+            },
+            Diagnostics = new CaptureDiagnostics
+            {
+                Image = screenshot.Diagnostics,
+                UiAutomation = new UiAutomationDiagnostics
+                {
+                    Status = extraction.Status,
+                    Detail = extraction.Detail
+                }
             }
         };
 

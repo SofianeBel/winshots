@@ -82,6 +82,35 @@ public sealed class CaptureStorageTests : IDisposable
                 AutomationNodeLimitReached = false,
                 AutomationTextLimitReached = false,
                 AutomationTimedOut = false
+            },
+            Diagnostics = new CaptureDiagnostics
+            {
+                Image = new ImageCaptureDiagnostics
+                {
+                    Status = "fallback",
+                    Strategy = "copy-from-screen",
+                    Attempts =
+                    [
+                        new CaptureAttemptDiagnostics
+                        {
+                            Strategy = "wm-print",
+                            Status = "invalid",
+                            DurationMs = 2,
+                            Detail = "black image"
+                        },
+                        new CaptureAttemptDiagnostics
+                        {
+                            Strategy = "copy-from-screen",
+                            Status = "succeeded",
+                            DurationMs = 1
+                        }
+                    ],
+                    LikelyInvalid = false
+                },
+                UiAutomation = new UiAutomationDiagnostics
+                {
+                    Status = "succeeded"
+                }
             }
         };
 
@@ -97,6 +126,71 @@ public sealed class CaptureStorageTests : IDisposable
         CaptureMetadata? written = JsonSerializer.Deserialize<CaptureMetadata>(File.ReadAllText(result.MetadataPath));
         Assert.NotNull(written);
         Assert.True(written.Metrics?.StorageWriteMs >= 0);
+        Assert.Equal("fallback", written.Diagnostics?.Image.Status);
+        Assert.Equal(2, written.Diagnostics?.Image.Attempts.Count);
+    }
+
+    [Fact]
+    public void CaptureMetadata_DeserializesLegacyMetadataWithoutDiagnostics()
+    {
+        const string json = """
+            {
+              "Id": "legacy",
+              "TimestampUtc": "2026-06-20T10:00:00.0000000Z",
+              "TimestampLocal": "2026-06-20 12:00:00 +02:00",
+              "Reason": "test",
+              "WindowTitle": "Legacy window",
+              "ProcessName": "notepad",
+              "ProcessId": 123,
+              "WindowHandle": "0x123",
+              "Bounds": { "Left": 1, "Top": 2, "Width": 300, "Height": 200 },
+              "ScreenshotPath": "C:\\captures\\screenshot.png",
+              "TextPath": "C:\\captures\\context.txt",
+              "ExtractedTextLength": 5
+            }
+            """;
+
+        CaptureMetadata? metadata = JsonSerializer.Deserialize<CaptureMetadata>(json);
+
+        Assert.NotNull(metadata);
+        Assert.Equal("Legacy window", metadata.WindowTitle);
+        Assert.Null(metadata.Diagnostics);
+    }
+
+    [Fact]
+    public void CaptureResult_DoesNotExposeMissingFailedScreenshotAsAvailable()
+    {
+        var metadata = new CaptureMetadata
+        {
+            Id = "failed",
+            TimestampUtc = "2026-07-10T10:00:00.0000000Z",
+            TimestampLocal = "2026-07-10 12:00:00 +02:00",
+            Reason = "test",
+            WindowTitle = "Window",
+            ProcessName = "test",
+            ProcessId = 1,
+            WindowHandle = "0x1",
+            Bounds = new CaptureBounds(0, 0, 100, 100),
+            ScreenshotPath = Path.Combine(_root, "missing.png"),
+            TextPath = Path.Combine(_root, "context.txt"),
+            ExtractedTextLength = 0,
+            Diagnostics = new CaptureDiagnostics
+            {
+                Image = new ImageCaptureDiagnostics
+                {
+                    Status = "failed",
+                    Attempts = [],
+                    LikelyInvalid = false,
+                    Detail = "All strategies failed."
+                },
+                UiAutomation = new UiAutomationDiagnostics { Status = "succeeded" }
+            }
+        };
+        var result = new CaptureResult(metadata, _root, metadata.ScreenshotPath, metadata.TextPath, Path.Combine(_root, "metadata.json"));
+
+        Assert.False(result.ImageCaptured);
+        Assert.Equal("failed", result.ImageStatus);
+        Assert.Null(result.AvailableScreenshotPath);
     }
 
     public void Dispose()

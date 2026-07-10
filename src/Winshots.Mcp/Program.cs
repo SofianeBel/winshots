@@ -9,6 +9,8 @@ using ModelContextProtocol.Server;
 using Winshots.App.Capture;
 using Winshots.App.Windows;
 
+_ = NativeMethods.TryEnablePerMonitorV2DpiAwareness();
+
 var builder = Host.CreateApplicationBuilder(args);
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole(options =>
@@ -136,11 +138,14 @@ public static class WinshotsTools
             capture.Metadata.ProcessName,
             capture.Metadata.Reason,
             capture.DirectoryPath,
-            capture.ScreenshotPath,
+            ScreenshotPath = capture.AvailableScreenshotPath,
+            ImageCaptured = capture.ImageCaptured,
+            ImageStatus = capture.ImageStatus,
             capture.TextPath,
             capture.MetadataPath,
             capture.Metadata.ExtractedTextLength,
-            capture.Metadata.Metrics
+            capture.Metadata.Metrics,
+            capture.Metadata.Diagnostics
         }), JsonOptions);
     }
 
@@ -412,8 +417,11 @@ public static class WinshotsTools
             result.Metadata.ProcessName,
             result.Metadata.Bounds,
             result.Metadata.Metrics,
+            result.Metadata.Diagnostics,
             result.DirectoryPath,
-            result.ScreenshotPath,
+            ScreenshotPath = result.AvailableScreenshotPath,
+            ImageCaptured = result.ImageCaptured,
+            ImageStatus = result.ImageStatus,
             result.TextPath,
             result.MetadataPath,
             Target = target,

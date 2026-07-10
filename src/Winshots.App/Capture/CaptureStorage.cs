@@ -237,6 +237,8 @@ public sealed class CaptureStorage
                Process: {metadata.ProcessName} ({metadata.ProcessId})
                Reason: {metadata.Reason}
                Screenshot: {metadata.ScreenshotPath}
+               Image capture: {metadata.Diagnostics?.Image.Status ?? "legacy"} via {metadata.Diagnostics?.Image.Strategy ?? "unknown"}
+               UI Automation: {metadata.Diagnostics?.UiAutomation.Status ?? "legacy"}
                Metrics: total={metadata.Metrics?.TotalMs ?? 0}ms screenshot={metadata.Metrics?.ScreenshotMs ?? 0}ms text={metadata.Metrics?.TextExtractionMs ?? 0}ms storage={metadata.Metrics?.StorageWriteMs ?? 0}ms nodes={metadata.Metrics?.AutomationNodeCount ?? 0}
 
                --- UI Automation context ---

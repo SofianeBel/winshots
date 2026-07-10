@@ -142,19 +142,22 @@ public sealed class VisualSessionRecorder
                 id: $"{_manifest.Id}-{frameId}",
                 options: _options.ToCaptureOptions());
 
+            bool imageCaptured = result.ImageCaptured;
             return new VisualSessionFrame
             {
                 Number = frameNumber,
                 TimestampUtc = timestamp.UtcDateTime.ToString("O", CultureInfo.InvariantCulture),
                 TimestampLocal = timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture),
-                Captured = true,
+                Captured = imageCaptured,
+                Error = imageCaptured ? null : result.Metadata.Diagnostics?.Image.Detail,
                 WindowTitle = result.Metadata.WindowTitle,
                 ProcessName = result.Metadata.ProcessName,
                 ScreenshotPath = result.ScreenshotPath,
                 TextPath = result.TextPath,
                 MetadataPath = result.MetadataPath,
                 Bounds = result.Metadata.Bounds,
-                Metrics = result.Metadata.Metrics
+                Metrics = result.Metadata.Metrics,
+                Diagnostics = result.Metadata.Diagnostics
             };
         }
         catch (Exception ex)

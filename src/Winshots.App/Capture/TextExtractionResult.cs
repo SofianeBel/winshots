@@ -5,4 +5,6 @@ public sealed record TextExtractionResult(
     int NodeCount,
     bool NodeLimitReached,
     bool TextLimitReached,
-    bool TimedOut);
+    bool TimedOut,
+    string Status = "succeeded",
+    string? Detail = null);
