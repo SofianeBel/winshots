@@ -593,9 +593,10 @@ public static class CodexChatPaster
         return false;
     }
 
-    private static bool IsCodexProcessName(string processName)
+    public static bool IsCodexProcessName(string processName)
     {
-        return string.Equals(processName, "codex", StringComparison.OrdinalIgnoreCase);
+        return string.Equals(processName, "codex", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(processName, "chatgpt", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool ContainsOrdinalIgnoreCase(string value, string expected)

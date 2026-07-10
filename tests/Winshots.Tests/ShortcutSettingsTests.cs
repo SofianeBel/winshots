@@ -139,6 +139,16 @@ public sealed class ShortcutSettingsTests : IDisposable
         Assert.False(isInput);
     }
 
+    [Theory]
+    [InlineData("codex")]
+    [InlineData("Codex")]
+    [InlineData("chatgpt")]
+    [InlineData("ChatGPT")]
+    public void CodexChatPaster_IsCodexProcessName_AcceptsLegacyAndRenamedProcesses(string processName)
+    {
+        Assert.True(CodexChatPaster.IsCodexProcessName(processName));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root))
