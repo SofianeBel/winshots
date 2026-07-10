@@ -15,9 +15,16 @@ else {
 }
 
 New-Item -ItemType Directory -Force -Path $resolvedOutput | Out-Null
+$existingDirectories = @(
+    Get-ChildItem -Path $resolvedOutput -Directory | ForEach-Object { $_.FullName }
+)
 dotnet run --project $project -- capture-once --output $resolvedOutput --delay-ms $DelayMs
+if ($LASTEXITCODE -ne 0) {
+    throw "Winshots capture command failed with exit code $LASTEXITCODE."
+}
 
 $latest = Get-ChildItem -Path $resolvedOutput -Directory |
+    Where-Object { $_.FullName -notin $existingDirectories } |
     Sort-Object LastWriteTime -Descending |
     Select-Object -First 1
 
