@@ -13,7 +13,12 @@ if (-not (Test-Path $dll)) {
     dotnet build (Join-Path $root "src\Winshots.Mcp\Winshots.Mcp.csproj") | Out-Host
 }
 
-$outputRoot = [System.IO.Path]::GetFullPath((Join-Path $root $Output))
+if ([System.IO.Path]::IsPathRooted($Output)) {
+    $outputRoot = [System.IO.Path]::GetFullPath($Output)
+}
+else {
+    $outputRoot = [System.IO.Path]::GetFullPath((Join-Path $root $Output))
+}
 New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
 
 $messages = @(
@@ -26,7 +31,7 @@ $messages = @(
             capabilities = @{}
             clientInfo = @{
                 name = "winshots-smoke"
-                version = "1.0.2"
+                version = "1.1.0"
             }
         }
     }

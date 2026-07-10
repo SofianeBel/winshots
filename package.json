@@ -1,12 +1,13 @@
 {
   "name": "winshots",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "private": true,
   "license": "UNLICENSED",
   "description": "Local Windows capture app with an Electron review UI.",
   "main": "src/Winshots.Electron/main.cjs",
   "scripts": {
     "ui:electron": "electron .",
+    "ui:test": "node --test tests/session-library.test.cjs",
     "ui:smoke": "electron . --smoke",
     "ui:screenshot": "electron . --screenshot artifacts/electron-ui.png",
     "ui:screenshot:preview": "electron . --screenshot artifacts/electron-ui-preview.png --screenshot-mode preview"

@@ -2,11 +2,11 @@
 
 Winshots is a local Windows capture tool for Codex debugging.
 
-It captures a Windows app screenshot plus best-effort Windows UI Automation text, stores everything locally, and offers manual capture, periodic capture, targeted MCP capture, and Codex-friendly visual debugging sessions.
+It captures a Windows app screenshot plus best-effort Windows UI Automation text, stores everything locally, and offers manual capture, periodic capture, targeted MCP capture, and browsable visual debugging sessions.
 
-Winshots is Windows-only and currently a 1.0 local release.
+Winshots is Windows-only and currently a 1.1 local release.
 
-## V1 Features
+## V1.1 Features
 
 - Configurable global shortcuts:
   - Capture: `Ctrl+Shift+Space`
@@ -15,6 +15,9 @@ Winshots is Windows-only and currently a 1.0 local release.
 - Capture to Codex detects a running `codex.exe`, focuses the Codex chat composer instead of the integrated terminal, then attaches `screenshot.png`, `metadata.json`, and `context.txt`
 - Periodic local timeline capture
 - Visual session capture with contextual frames and optional `video.mp4`
+- Local Sessions library with frame timeline, screenshot preview, and associated context
+- Bounded `WM_PRINT` capture with a virtual-screen fallback for compatibility
+- Structured image strategy/fallback and UI Automation diagnostics in `metadata.json`
 - Capture timing metrics in `metadata.json`
 - Top-right recording overlay while timeline/session capture is active or a capture is running
 - Codex can list and target visible windows through MCP before taking a capture
@@ -49,7 +52,7 @@ If Codex App is not already running, Windows refuses to focus it, or Winshots ca
 To install Winshots like a normal Windows app, run:
 
 ```text
-winshots-1.0.2-win-x64-setup.exe
+winshots-1.1.0-win-x64-setup.exe
 ```
 
 The setup installs the Windows app, Electron review UI, MCP server, Start Menu shortcuts, and an Apps & Features uninstaller under:
@@ -67,7 +70,7 @@ Codex plugin registration is intentionally separate so a locked Codex plugin cac
 For portable use without installation, download and extract:
 
 ```text
-winshots-1.0.2-win-x64.zip
+winshots-1.1.0-win-x64.zip
 ```
 
 Then run:
@@ -79,14 +82,14 @@ Then run:
 Build the installer package locally with:
 
 ```powershell
-.\scripts\build-release.ps1 -Version 1.0.2
+.\scripts\build-release.ps1 -Version 1.1.0
 ```
 
 The release files are written to:
 
 ```text
-artifacts\release\winshots-1.0.2-win-x64-setup.exe
-artifacts\release\winshots-1.0.2-win-x64.zip
+artifacts\release\winshots-1.1.0-win-x64-setup.exe
+artifacts\release\winshots-1.1.0-win-x64.zip
 ```
 
 ## Run
@@ -104,18 +107,20 @@ npm install
 npm run ui:electron
 ```
 
-The Electron UI calls the local C# app for capture, Capture to Codex, timeline, and visual session commands. It also reads the same local capture root as the C# app by default:
+The Electron UI calls the local C# app for capture, Capture to Codex, timeline, and visual session commands. It reads the same local capture and session roots as the C# app by default:
 
 ```text
 %USERPROFILE%\Documents\Winshots\captures
+%USERPROFILE%\Documents\Winshots\sessions
 ```
 
-Override it for testing with `WINSHOTS_CAPTURE_ROOT`. Override the C# app command with `WINSHOTS_APP_PATH` when testing against a specific built executable.
+Override them for testing with `WINSHOTS_CAPTURE_ROOT` and `WINSHOTS_SESSION_ROOT`. Override the C# app command with `WINSHOTS_APP_PATH` when testing against a specific built executable.
 
 Smoke-check without opening the full app window:
 
 ```powershell
 npm run ui:smoke
+npm run ui:test
 npm run ui:screenshot
 ```
 
