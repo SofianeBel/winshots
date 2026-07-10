@@ -1,6 +1,6 @@
 {
   "name": "winshots",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Local Windows capture workflows for Codex debugging with Winshots and its MCP server.",
   "author": {
     "name": "Winshots"
@@ -18,7 +18,7 @@
   "interface": {
     "displayName": "Winshots",
     "shortDescription": "Capture local Windows app state for Codex",
-    "longDescription": "Winshots gives Codex local-first workflows for capturing visible Windows app state, UI Automation text, targeted windows, recent captures, short visual debugging sessions, and host-owned Instant Replay through the Winshots MCP server.",
+    "longDescription": "Winshots gives Codex local-first workflows for capturing visible Windows app state, UI Automation text, targeted windows, recent captures, visual sessions, Instant Replay, and deterministic Agent Watch waits through the Winshots MCP server.",
     "developerName": "Winshots",
     "category": "Developer Tools",
     "capabilities": [
@@ -30,7 +30,8 @@
       "Capture the current Windows app with Winshots and summarize what Codex should inspect.",
       "Use Winshots to target a visible app window and collect screenshot plus UI context.",
       "Record a short Winshots visual session for this UI bug.",
-      "Save the last few seconds from the running Winshots Instant Replay buffer."
+      "Save the last few seconds from the running Winshots Instant Replay buffer.",
+      "Wait for a local Windows app condition with Winshots Agent Watch."
     ],
     "brandColor": "#2563EB",
     "screenshots": []

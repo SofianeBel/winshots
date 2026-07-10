@@ -152,6 +152,7 @@ $releaseNotes = @"
 - Codex plugin registration is separate so a locked Codex plugin cache cannot break the Winshots app install.
 - Captures and sessions stay local under the user's Documents folder unless the user shares them explicitly.
 - Instant Replay keeps a bounded temporary local buffer and saves autonomous sessions without requiring ffmpeg.
+- Agent Watch adds five bounded deterministic MCP waits with timeout, cancellation, and local diagnostic artifacts.
 "@
 Set-Content -Path (Join-Path $outputRootPath "RELEASE_NOTES.md") -Value $releaseNotes -Encoding UTF8
 
