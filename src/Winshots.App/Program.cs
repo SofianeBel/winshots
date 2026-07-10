@@ -326,7 +326,7 @@ internal static class Program
     private static void ReportMissingElectronUi()
     {
         const string message =
-            "The Winshots Electron UI was not found. Extract the full winshots-1.0.1-win-x64.zip package or run with --winforms to open the legacy fallback.";
+            "The Winshots Electron UI was not found. Extract the full winshots-1.0.2-win-x64.zip package or run with --winforms to open the legacy fallback.";
 
         try
         {
