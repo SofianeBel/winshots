@@ -10,6 +10,7 @@ public sealed class CaptureWorkflow
 
     private readonly CaptureStorage _storage;
     private readonly UiAutomationTextExtractor _textExtractor = new();
+    private readonly WindowsOcrTextExtractor _ocrExtractor = new();
 
     public CaptureWorkflow(string rootPath)
     {
@@ -243,6 +244,15 @@ public sealed class CaptureWorkflow
         var textStopwatch = Stopwatch.StartNew();
         TextExtractionResult extraction = _textExtractor.ExtractResult(hwnd, options.TextExtractionTimeout);
         textStopwatch.Stop();
+        OcrTextExtractionResult ocr = OcrTextExtractionResult.NotNeeded;
+        if (TextExtractionQuality.NeedsOcr(extraction) && File.Exists(screenshotPath))
+        {
+            ocr = _ocrExtractor
+                .ExtractFileAsync(screenshotPath, options.OcrTimeout)
+                .GetAwaiter()
+                .GetResult();
+        }
+        var textContext = new TextContext(extraction, ocr);
         totalStopwatch.Stop();
 
         var metadata = new CaptureMetadata
@@ -258,17 +268,20 @@ public sealed class CaptureWorkflow
             Bounds = screenshot.Bounds,
             ScreenshotPath = screenshotPath,
             TextPath = textPath,
-            ExtractedTextLength = extraction.Text.Length,
+            ExtractedTextLength = textContext.MatchText.Length,
             Metrics = new CaptureMetrics
             {
                 TotalMs = totalStopwatch.ElapsedMilliseconds,
                 ScreenshotMs = screenshotMs,
                 TextExtractionMs = textStopwatch.ElapsedMilliseconds,
+                OcrMs = ocr.DurationMs,
                 ScreenshotBytes = screenshotBytes,
                 AutomationNodeCount = extraction.NodeCount,
                 AutomationNodeLimitReached = extraction.NodeLimitReached,
                 AutomationTextLimitReached = extraction.TextLimitReached,
-                AutomationTimedOut = extraction.TimedOut
+                AutomationTimedOut = extraction.TimedOut,
+                OcrLineCount = ocr.LineCount,
+                OcrCharacterCount = ocr.CharacterCount
             },
             Diagnostics = new CaptureDiagnostics
             {
@@ -277,11 +290,21 @@ public sealed class CaptureWorkflow
                 {
                     Status = extraction.Status,
                     Detail = extraction.Detail
-                }
+                },
+                Ocr = ocr.Status == "not-needed" ? null : new OcrDiagnostics
+                {
+                    Status = ocr.Status,
+                    Language = ocr.Language,
+                    DurationMs = ocr.DurationMs,
+                    LineCount = ocr.LineCount,
+                    CharacterCount = ocr.CharacterCount,
+                    Detail = ocr.Detail
+                },
+                TextSource = textContext.TextSource
             }
         };
 
-        return _storage.WriteCapture(directory, metadata, extraction.Text, metadataPath, appendToIndex);
+        return _storage.WriteCapture(directory, metadata, textContext.ArtifactText, metadataPath, appendToIndex);
     }
 
     private static void TryDelete(string path)

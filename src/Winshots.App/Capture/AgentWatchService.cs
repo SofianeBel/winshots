@@ -161,7 +161,7 @@ public sealed class AgentWatchService
             includeText: true,
             includeImage: false,
             observation => observation.WindowFound && Contains(observation.MatchText, textContains)
-                ? Evaluation.Succeeded("The case-insensitive text substring was observed in the current Windows UI Automation context.")
+                ? Evaluation.Succeeded("The case-insensitive text substring was observed in the current local text context.")
                 : Evaluation.Pending(),
             cancellationToken,
             textContains,
@@ -400,7 +400,7 @@ public sealed class AgentWatchService
                 },
                 Target = target,
                 TextContains = textContains,
-                TextSource = textSource,
+                TextSource = last?.TextSource ?? textSource,
                 TargetObserved = targetObserved,
                 LastHashDistance = lastHashDistance,
                 StableForMs = stableForMs,
@@ -475,8 +475,9 @@ public sealed class AgentWatchService
     {
         private readonly CaptureWorkflow _workflow = new(captureRoot);
         private readonly UiAutomationTextExtractor _textExtractor = new();
+        private readonly WindowsOcrTextExtractor _ocrExtractor = new();
 
-        public Task<AgentWatchObservation> ObserveAsync(
+        public async Task<AgentWatchObservation> ObserveAsync(
             AgentWatchTarget target,
             bool includeText,
             bool includeImage,
@@ -488,11 +489,11 @@ public sealed class AgentWatchService
             WindowSnapshot? window = ResolveWindow(target);
             if (window is null)
             {
-                return Task.FromResult(new AgentWatchObservation
+                return new AgentWatchObservation
                 {
                     TimestampUtc = timestamp.ToString("O", CultureInfo.InvariantCulture),
                     WindowFound = false
-                });
+                };
             }
 
             try
@@ -506,35 +507,52 @@ public sealed class AgentWatchService
                     string context = includeText && File.Exists(capture.TextPath)
                         ? File.ReadAllText(capture.TextPath)
                         : string.Empty;
-                    return Task.FromResult(BuildObservation(
+                    return BuildObservation(
                         timestamp,
                         window,
                         includeText ? "windows_ui_automation_capture_context" : null,
                         includeText ? "captured" : null,
                         context,
                         hash,
-                        capture));
+                        capture);
                 }
 
                 if (includeText)
                 {
-                    TimeSpan textBudget = TimeSpan.FromMilliseconds(Math.Clamp(remaining.TotalMilliseconds, 100, 1_000));
+                    TimeSpan textBudget = TimeSpan.FromMilliseconds(Math.Clamp(
+                        Math.Min(remaining.TotalMilliseconds * 0.4, 1_000),
+                        100,
+                        1_000));
                     TextExtractionResult text = _textExtractor.ExtractResult(window.Handle, textBudget);
-                    return Task.FromResult(BuildObservation(
+                    OcrTextExtractionResult ocr = OcrTextExtractionResult.NotNeeded;
+                    if (TextExtractionQuality.NeedsOcr(text))
+                    {
+                        TimeSpan ocrBudget = remaining - textBudget;
+                        if (ocrBudget > TimeSpan.Zero)
+                        {
+                            using Bitmap bitmap = WindowScreenshot.CaptureVisibleBitmap(window.Handle);
+                            ocr = await _ocrExtractor
+                                .ExtractBitmapAsync(bitmap, ocrBudget, cancellationToken)
+                                .ConfigureAwait(false);
+                        }
+                    }
+
+                    var context = new TextContext(text, ocr);
+                    return BuildObservation(
                         timestamp,
                         window,
-                        "windows_ui_automation",
-                        text.Status,
-                        text.Text,
+                        context.TextSource,
+                        ocr.Status == "not-needed" ? text.Status : ocr.Status,
+                        context.MatchText,
                         null,
-                        null));
+                        null);
                 }
 
-                return Task.FromResult(BuildObservation(timestamp, window, null, null, null, null, null));
+                return BuildObservation(timestamp, window, null, null, null, null, null);
             }
             catch (Exception ex)
             {
-                return Task.FromResult(new AgentWatchObservation
+                return new AgentWatchObservation
                 {
                     TimestampUtc = timestamp.ToString("O", CultureInfo.InvariantCulture),
                     WindowFound = true,
@@ -543,7 +561,7 @@ public sealed class AgentWatchService
                     ProcessName = window.ProcessName,
                     ProcessId = window.ProcessId,
                     Error = ex.Message
-                });
+                };
             }
         }
 

@@ -77,6 +77,25 @@ public sealed class AgentWatchServiceTests
     }
 
     [Fact]
+    public async Task WaitForTextAsync_ReportsOcrSource_WhenMatchCameFromImageText()
+    {
+        var scheduler = new FakeScheduler();
+        var service = CreateService(scheduler, Window(matchText: "Aimlabs") with
+        {
+            TextSource = "windows_ocr"
+        });
+
+        AgentWatchResult result = await service.WaitForTextAsync(
+            Target,
+            "Aimlabs",
+            new AgentWatchOptions { TimeoutMs = 500, PollIntervalMs = 100 });
+
+        Assert.Equal("succeeded", result.Outcome);
+        Assert.Equal("windows_ocr", result.TextSource);
+        Assert.Contains("local text context", result.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task WaitForDisappearAsync_RequiresPriorPositiveObservation()
     {
         var scheduler = new FakeScheduler();

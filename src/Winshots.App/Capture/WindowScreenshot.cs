@@ -36,6 +36,32 @@ public static class WindowScreenshot
         return Save(hwnd, outputPath, bounds, Strategies);
     }
 
+    internal static Bitmap CaptureVisibleBitmap(IntPtr hwnd)
+    {
+        CaptureBounds bounds = NativeMethods.GetWindowBounds(hwnd);
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            throw new InvalidOperationException("The target window has no visible bounds.");
+        }
+
+        if ((long)bounds.Width * bounds.Height > MaxPixelCount)
+        {
+            throw new InvalidOperationException($"The window is too large to capture safely ({bounds.Width}x{bounds.Height}).");
+        }
+
+        var bitmap = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb);
+        try
+        {
+            _ = CaptureFromVirtualScreen(hwnd, bounds, bitmap);
+            return bitmap;
+        }
+        catch
+        {
+            bitmap.Dispose();
+            throw;
+        }
+    }
+
     internal static ScreenshotCaptureResult Save(
         IntPtr hwnd,
         string outputPath,

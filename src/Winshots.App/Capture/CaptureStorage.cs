@@ -239,7 +239,9 @@ public sealed class CaptureStorage
                Screenshot: {metadata.ScreenshotPath}
                Image capture: {metadata.Diagnostics?.Image.Status ?? "legacy"} via {metadata.Diagnostics?.Image.Strategy ?? "unknown"}
                UI Automation: {metadata.Diagnostics?.UiAutomation.Status ?? "legacy"}
-               Metrics: total={metadata.Metrics?.TotalMs ?? 0}ms screenshot={metadata.Metrics?.ScreenshotMs ?? 0}ms text={metadata.Metrics?.TextExtractionMs ?? 0}ms storage={metadata.Metrics?.StorageWriteMs ?? 0}ms nodes={metadata.Metrics?.AutomationNodeCount ?? 0}
+               Text source: {metadata.Diagnostics?.TextSource ?? "windows_ui_automation"}
+               OCR: {metadata.Diagnostics?.Ocr?.Status ?? "not-needed"}
+               Metrics: total={metadata.Metrics?.TotalMs ?? 0}ms screenshot={metadata.Metrics?.ScreenshotMs ?? 0}ms text={metadata.Metrics?.TextExtractionMs ?? 0}ms ocr={metadata.Metrics?.OcrMs ?? 0}ms storage={metadata.Metrics?.StorageWriteMs ?? 0}ms nodes={metadata.Metrics?.AutomationNodeCount ?? 0}
 
                --- UI Automation context ---
                {text}

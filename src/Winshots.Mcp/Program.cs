@@ -228,9 +228,9 @@ public static class WinshotsTools
         return JsonSerializer.Serialize(result, JsonOptions);
     }
 
-    [McpServerTool, Description("Wait until a case-insensitive text substring appears in the current local Windows UI Automation context for a matching window. No OCR is used.")]
+    [McpServerTool, Description("Wait until a case-insensitive text substring appears in the current local Windows text context. Uses UI Automation first and local Windows OCR only when accessibility text is too sparse.")]
     public static async Task<string> WaitForText(
-        [Description("Required case-insensitive substring to find in Windows UI Automation text.")] string textContains,
+        [Description("Required case-insensitive substring to find in the local Windows text context.")] string textContains,
         [Description("Optional window handle returned by list_windows.")] string? windowHandle = null,
         [Description("Optional case-insensitive window title substring.")] string? titleContains = null,
         [Description("Optional case-insensitive process name substring, with or without .exe.")] string? processName = null,
@@ -266,9 +266,9 @@ public static class WinshotsTools
         return JsonSerializer.Serialize(result, JsonOptions);
     }
 
-    [McpServerTool, Description("Wait for a matching window, or optional UI Automation text within it, to disappear after it has first been observed. Initial absence does not succeed.")]
+    [McpServerTool, Description("Wait for a matching window, or optional local text within it, to disappear after it has first been observed. Text uses UI Automation with local Windows OCR fallback. Initial absence does not succeed.")]
     public static async Task<string> WaitForDisappear(
-        [Description("Optional case-insensitive Windows UI Automation text substring. Omit to wait for the window itself to disappear.")] string? textContains = null,
+        [Description("Optional case-insensitive local Windows text substring. Omit to wait for the window itself to disappear.")] string? textContains = null,
         [Description("Optional window handle returned by list_windows.")] string? windowHandle = null,
         [Description("Optional case-insensitive window title substring.")] string? titleContains = null,
         [Description("Optional case-insensitive process name substring, with or without .exe.")] string? processName = null,

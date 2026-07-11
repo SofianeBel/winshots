@@ -1,6 +1,6 @@
 # Agent Watch MCP reference
 
-Agent Watch turns Winshots' local capture primitives into deterministic, bounded waits for Windows agents. It does not use AI, OCR, telemetry, a cloud service, or a second background daemon.
+Agent Watch turns Winshots' local capture primitives into deterministic, bounded waits for Windows agents. It uses Windows UI Automation first and the local Windows OCR engine only when accessibility text is too sparse. It does not use remote AI, telemetry, a cloud service, or a second background daemon.
 
 ## Target selection
 
@@ -21,14 +21,14 @@ All five tools accept `timeoutMs` (default 10000, clamped to 100-300000) and `po
 | Tool | Additional inputs | Success condition |
 | --- | --- | --- |
 | `wait_for_window` | None | A matching capturable top-level window exists. |
-| `wait_for_text` | Required `textContains` | The case-insensitive substring exists in the full current Windows UI Automation text. Matching is performed before the response preview is truncated. No OCR or screenshot text recognition is used. |
+| `wait_for_text` | Required `textContains` | The case-insensitive substring exists in the full current local text context. Matching is performed before the response preview is truncated; local Windows OCR is used only when UI Automation is too sparse. |
 | `wait_for_change` | `outputRoot`; `minHashDistance` default 5, clamped 1-64 | Current screenshot dHash differs from the fixed baseline by at least the applied Hamming distance. A replacement matching window counts as distance 64. |
 | `wait_for_disappear` | Optional `textContains` | The matching window or UIA text is absent after it was observed at least once. Initial absence never succeeds. |
 | `wait_for_stable` | `outputRoot`; `stableDurationMs` default 1500, clamped 100-60000; `maxHashDistance` default 2, clamped 0-64 | Every sampled screenshot remains within the applied dHash distance from the fixed stable baseline for the applied duration. A drift beyond the threshold resets both baseline and duration. |
 
-`wait_for_change` and `wait_for_stable` reuse the normal capture workflow. Each sampled frame keeps `screenshot.png`, `context.txt`, and `metadata.json` under `outputRoot`, or under `%USERPROFILE%\Documents\Winshots\captures` by default. The visual predicates compare screenshots only; captured UI Automation context remains an artifact and is not treated as OCR.
+`wait_for_change` and `wait_for_stable` reuse the normal capture workflow. Each sampled frame keeps `screenshot.png`, `context.txt`, and `metadata.json` under `outputRoot`, or under `%USERPROFILE%\Documents\Winshots\captures` by default. The visual predicates compare screenshots only. Text waits keep OCR probes in memory and do not create a capture directory for every poll.
 
-`wait_for_text` and text-mode `wait_for_disappear` inspect live Windows UI Automation text. The full bounded UIA result is used for matching, but only `TextPreview` (at most 1000 characters) is returned.
+`wait_for_text` and text-mode `wait_for_disappear` inspect live local text using UI Automation first and Windows OCR only when needed. The full bounded result is used for matching, but only `TextPreview` (at most 1000 characters) is returned.
 
 ## Result schema
 

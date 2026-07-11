@@ -4,6 +4,8 @@ public sealed record CaptureDiagnostics
 {
     public required ImageCaptureDiagnostics Image { get; init; }
     public required UiAutomationDiagnostics UiAutomation { get; init; }
+    public OcrDiagnostics? Ocr { get; init; }
+    public string TextSource { get; init; } = "windows_ui_automation";
 }
 
 public sealed record ImageCaptureDiagnostics
@@ -26,6 +28,16 @@ public sealed record CaptureAttemptDiagnostics
 public sealed record UiAutomationDiagnostics
 {
     public required string Status { get; init; }
+    public string? Detail { get; init; }
+}
+
+public sealed record OcrDiagnostics
+{
+    public required string Status { get; init; }
+    public string? Language { get; init; }
+    public required long DurationMs { get; init; }
+    public required int LineCount { get; init; }
+    public required int CharacterCount { get; init; }
     public string? Detail { get; init; }
 }
 
