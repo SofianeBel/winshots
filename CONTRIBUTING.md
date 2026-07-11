@@ -44,7 +44,7 @@ npm run ui:smoke
 For installer or release workflow changes:
 
 ```powershell
-.\scripts\build-release.ps1 -Version 1.3.0
+.\scripts\build-release.ps1 -Version 1.3.1
 ```
 
 ## Contribution Rules

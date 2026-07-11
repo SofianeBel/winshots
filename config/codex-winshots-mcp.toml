@@ -3,7 +3,7 @@
 
 [mcp_servers.winshots]
 command = "dotnet"
-args = ["<REPO_ROOT>/src/Winshots.Mcp/bin/Debug/net8.0-windows/Winshots.Mcp.dll"]
+args = ["<REPO_ROOT>/src/Winshots.Mcp/bin/Debug/net8.0-windows10.0.19041.0/Winshots.Mcp.dll"]
 type = "stdio"
 startup_timeout_sec = 20.0
 tool_timeout_sec = 330

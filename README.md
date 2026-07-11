@@ -1,8 +1,8 @@
 # Winshots
 
-Winshots is a local Windows capture tool for Codex debugging.
+Winshots is an open-source, local-first Windows capture tool for Codex debugging.
 
-It captures a Windows app screenshot plus best-effort Windows UI Automation text, stores everything locally, and offers manual capture, periodic capture, targeted MCP capture, and browsable visual debugging sessions.
+It captures a Windows app screenshot plus best-effort Windows UI Automation text, falls back to local Windows OCR when accessibility text is too sparse, stores everything locally, and offers manual capture, periodic capture, targeted MCP capture, and browsable visual debugging sessions.
 
 Winshots is Windows-only and currently a 1.3 local release.
 
@@ -11,7 +11,7 @@ Winshots is Windows-only and currently a 1.3 local release.
 - Five bounded MCP waits for local Windows automation: `wait_for_window`, `wait_for_text`, `wait_for_change`, `wait_for_disappear`, and `wait_for_stable`
 - Deterministic results distinguish `succeeded`, `timed_out`, and `cancelled`, with duration, frames observed, comparisons, reason, and every applied bound
 - Standard MCP request cancellation is honored; timeouts clamp to 100-300000 ms and polling clamps to 100-5000 ms
-- Text waits inspect full local Windows UI Automation context without OCR; only a bounded preview is returned
+- Text waits inspect full local Windows text context, using UI Automation first and local Windows OCR only as a fallback; only a bounded preview is returned
 - Visual change/stability reuse the capture pipeline and perceptual dHash, while keeping screenshots, context, and metadata local
 - Disappearance requires the target to have been observed first; stability is measured as a bounded duration against a fixed baseline
 
@@ -51,7 +51,7 @@ It also retains the V1.1 capture and visual session features:
 - MCP stdio server so Codex can call Winshots directly
 - Smoke and measurement commands for CLI verification
 
-No capture is uploaded by this app.
+No capture is uploaded by this app. OCR runs through the Windows OCR engine on the local machine and depends on OCR languages installed for the current Windows profile.
 
 Shortcut settings are stored at:
 
@@ -74,7 +74,7 @@ If Codex App is not already running, Windows refuses to focus it, or Winshots ca
 To install Winshots like a normal Windows app, run:
 
 ```text
-winshots-1.3.0-win-x64-setup.exe
+winshots-1.3.1-win-x64-setup.exe
 ```
 
 The setup installs the Windows app, Electron review UI, MCP server, Start Menu shortcuts, and an Apps & Features uninstaller under:
@@ -92,7 +92,7 @@ Codex plugin registration is intentionally separate so a locked Codex plugin cac
 For portable use without installation, download and extract:
 
 ```text
-winshots-1.3.0-win-x64.zip
+winshots-1.3.1-win-x64.zip
 ```
 
 Then run:
@@ -104,14 +104,14 @@ Then run:
 Build the installer package locally with:
 
 ```powershell
-.\scripts\build-release.ps1 -Version 1.3.0
+.\scripts\build-release.ps1 -Version 1.3.1
 ```
 
 The release files are written to:
 
 ```text
-artifacts\release\winshots-1.3.0-win-x64-setup.exe
-artifacts\release\winshots-1.3.0-win-x64.zip
+artifacts\release\winshots-1.3.1-win-x64-setup.exe
+artifacts\release\winshots-1.3.1-win-x64.zip
 ```
 
 ## Run
@@ -199,7 +199,7 @@ Or add this block to `%USERPROFILE%\.codex\config.toml`, replacing `<REPO_ROOT>`
 ```toml
 [mcp_servers.winshots]
 command = "dotnet"
-args = ["<REPO_ROOT>/src/Winshots.Mcp/bin/Debug/net8.0-windows/Winshots.Mcp.dll"]
+args = ["<REPO_ROOT>/src/Winshots.Mcp/bin/Debug/net8.0-windows10.0.19041.0/Winshots.Mcp.dll"]
 type = "stdio"
 startup_timeout_sec = 20.0
 tool_timeout_sec = 330
@@ -265,4 +265,4 @@ This repository is intended to be published as source code for the local Windows
 
 ## License
 
-All rights reserved. See [LICENSE](LICENSE).
+Winshots is available under the [MIT License](LICENSE).

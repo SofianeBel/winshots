@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $root = Resolve-Path "$PSScriptRoot\.."
-$dll = Join-Path $root "src\Winshots.Mcp\bin\Debug\net8.0-windows\Winshots.Mcp.dll"
+$dll = Join-Path $root "src\Winshots.Mcp\bin\Debug\net8.0-windows10.0.19041.0\Winshots.Mcp.dll"
 if (-not (Test-Path $dll)) {
     dotnet build (Join-Path $root "src\Winshots.Mcp\Winshots.Mcp.csproj") | Out-Host
 }
@@ -58,7 +58,7 @@ try {
                 capabilities = @{}
                 clientInfo = @{
                     name = "winshots-agent-watch-real-smoke"
-                    version = "1.3.0"
+                    version = "1.3.1"
                 }
             }
         },
@@ -183,7 +183,7 @@ try {
     }
 
     $report = [ordered]@{
-        Version = "1.3.0"
+        Version = "1.3.1"
         RunId = $runId
         TimestampUtc = [DateTime]::UtcNow.ToString("O")
         LocalOnly = $true

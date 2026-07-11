@@ -8,7 +8,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $root = Resolve-Path "$PSScriptRoot\.."
-$dll = Join-Path $root "src\Winshots.Mcp\bin\Debug\net8.0-windows\Winshots.Mcp.dll"
+$dll = Join-Path $root "src\Winshots.Mcp\bin\Debug\net8.0-windows10.0.19041.0\Winshots.Mcp.dll"
 
 if (-not (Test-Path $dll)) {
     dotnet build (Join-Path $root "src\Winshots.Mcp\Winshots.Mcp.csproj") | Out-Host
@@ -66,7 +66,7 @@ function Invoke-McpBatch {
             capabilities = @{}
             clientInfo = @{
                 name = "winshots-real-examples-smoke"
-                version = "1.3.0"
+                version = "1.3.1"
             }
         }
     }

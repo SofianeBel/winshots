@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.3.1 - 2026-07-11
+
+### Added
+
+- Automatic local Windows OCR fallback when UI Automation exposes too little useful text, including Steam and other Chromium-based apps.
+- OCR-backed `wait_for_text` and text-mode `wait_for_disappear` checks that keep polling images in memory.
+- OCR source, language, timing, line, and character diagnostics in capture metadata and context artifacts.
+
+### Changed
+
+- Windows builds now target Windows 10 version 19041 or later for the native OCR APIs.
+
 ## 1.3.0 - 2026-07-10
 
 ### Added
@@ -11,7 +23,7 @@
 
 ### Privacy
 
-- Agent Watch uses only local window enumeration, Windows UI Automation, screenshots, capture context, and perceptual hashes. It adds no AI, OCR, telemetry, cloud service, or upload.
+- Agent Watch uses local window enumeration, Windows UI Automation, screenshots, local Windows OCR fallback, capture context, and perceptual hashes. It adds no remote AI, telemetry, cloud service, or upload.
 
 ## 1.2.0 - 2026-07-09
 
