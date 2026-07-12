@@ -3,7 +3,7 @@
 For normal installation, run the setup executable from the release:
 
 ```text
-winshots-1.3.1-win-x64-setup.exe
+winshots-1.3.2-win-x64-setup.exe
 ```
 
 The setup installs Winshots under the local user profile, creates Start Menu shortcuts, and registers an Apps & Features uninstaller.

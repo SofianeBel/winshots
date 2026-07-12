@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.2 - 2026-07-13
+
+### Fixed
+
+- Electron session details now repaint reliably after session finalization and frame changes.
+- The Electron review UI now enables renderer accessibility and exposes its primary controls to Windows UI Automation.
+
 ## 1.3.1 - 2026-07-11
 
 ### Added

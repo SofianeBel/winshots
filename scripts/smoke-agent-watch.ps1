@@ -58,7 +58,7 @@ try {
                 capabilities = @{}
                 clientInfo = @{
                     name = "winshots-agent-watch-real-smoke"
-                    version = "1.3.1"
+                    version = "1.3.2"
                 }
             }
         },
@@ -183,7 +183,7 @@ try {
     }
 
     $report = [ordered]@{
-        Version = "1.3.1"
+        Version = "1.3.2"
         RunId = $runId
         TimestampUtc = [DateTime]::UtcNow.ToString("O")
         LocalOnly = $true
