@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("winshots", {
+  isSmoke: process.argv.includes("--winshots-smoke"),
   listCaptures: () => ipcRenderer.invoke("captures:list"),
   captureNow: (options) => ipcRenderer.invoke("app:capture", options),
   toggleTimeline: (options) => ipcRenderer.invoke("timeline:toggle", options),
@@ -34,5 +35,6 @@ contextBridge.exposeInMainWorld("winshots", {
   minimize: () => ipcRenderer.invoke("window:minimize"),
   maximize: () => ipcRenderer.invoke("window:maximize"),
   close: () => ipcRenderer.invoke("window:close"),
+  requestRepaint: () => ipcRenderer.send("window:invalidate"),
   notifyReady: () => ipcRenderer.send("renderer:ready")
 });

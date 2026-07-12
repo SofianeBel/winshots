@@ -90,6 +90,7 @@ const elements = {
 };
 
 let replayPollTimer = null;
+let sessionRepaintPending = false;
 
 elements.captureView = document.querySelector("[data-capture-view]");
 elements.sessionView = document.querySelector("[data-session-view]");
@@ -529,7 +530,20 @@ function selectedSessionFrame(session = selectedSession()) {
   return session?.frames?.find((frame) => frame.number === state.selectedFrameNumber) || session?.frames?.[0] || null;
 }
 
+function requestSessionRepaint() {
+  if (sessionRepaintPending) {
+    return;
+  }
+
+  sessionRepaintPending = true;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    sessionRepaintPending = false;
+    window.winshots.requestRepaint();
+  }));
+}
+
 function renderSessionBrowser() {
+  requestSessionRepaint();
   elements.sessionCount.textContent = String(state.sessions.length);
   if (state.sessions.length === 0) {
     elements.sessionList.innerHTML = `<div class="empty-state"><strong>No sessions found</strong><span>Visual sessions stay under Documents\\Winshots\\sessions.</span></div>`;
@@ -698,6 +712,7 @@ function renderRecent() {
 
 async function renderInspector() {
   if (state.section === "sessions") {
+    state.inspectorRequestId += 1;
     renderSessionInspector();
     return;
   }
@@ -1475,6 +1490,24 @@ async function waitForImages() {
   await Promise.race([loads, new Promise((resolve) => setTimeout(resolve, 3500))]);
 }
 
+function prepareSmokeSession() {
+  state.section = "sessions";
+  state.sessions = [{
+    id: "smoke-session",
+    detailsLoaded: true,
+    capturedFrameCount: 2,
+    failedFrameCount: 0,
+    frames: [
+      { number: 1, captured: true, context: "First frame" },
+      { number: 2, captured: true, context: "Second frame" }
+    ]
+  }];
+  state.selectedSessionId = "smoke-session";
+  state.selectedFrameNumber = 1;
+  renderAll();
+  document.querySelector('[data-frame-number="2"]')?.click();
+}
+
 async function init() {
   mountIcons();
   applyStoredTheme();
@@ -1498,6 +1531,9 @@ async function init() {
   }
 
   await loadReplayStatus();
+  if (window.winshots.isSmoke) {
+    prepareSmokeSession();
+  }
 
   await waitForImages();
   requestAnimationFrame(() => window.winshots.notifyReady());

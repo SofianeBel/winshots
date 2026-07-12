@@ -34,6 +34,7 @@ let screenshotAttempts = 0;
 let activeSession = null;
 let captureWatcher;
 let captureChangeTimer;
+let repaintRequestCount = 0;
 const fileHashCache = new Map();
 
 function backgroundSettingsPath() {
@@ -740,7 +741,8 @@ function createWindow() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      preload: path.join(__dirname, "preload.cjs")
+      preload: path.join(__dirname, "preload.cjs"),
+      additionalArguments: isSmoke ? ["--winshots-smoke"] : []
     }
   });
 
@@ -1653,6 +1655,15 @@ ipcMain.handle("window:maximize", () => {
 });
 ipcMain.handle("window:close", () => mainWindow?.close());
 
+ipcMain.on("window:invalidate", () => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  repaintRequestCount += 1;
+  mainWindow.webContents.invalidate();
+});
+
 ipcMain.on("renderer:ready", async () => {
   if (smokeTimer) {
     clearTimeout(smokeTimer);
@@ -1666,11 +1677,40 @@ ipcMain.on("renderer:ready", async () => {
   }
 
   if (isSmoke) {
-    app.exit(0);
+    try {
+      await delay(100);
+      const result = await mainWindow.webContents.executeJavaScript(`
+        ({
+          activeFrame: document.querySelector('.frame-marker.active')?.textContent?.trim(),
+          inspectorFrame: document.querySelector('#inspector-body .inspector-section:nth-of-type(2) h4')?.textContent?.trim(),
+          sessionRole: document.querySelector('[data-session-id="smoke-session"]')?.tagName,
+          dialogCount: document.querySelectorAll('[role="dialog"][aria-labelledby]').length,
+          commandNames: [...document.querySelectorAll('.nav-item, [data-command], [data-replay-action], [data-settings-open]')].map((button) =>
+            button.getAttribute('aria-label') || button.textContent.replace(/\\s+/g, ' ').trim()
+          )
+        })
+      `);
+
+      const expectedNames = ["Captures", "Sessions", "Capture", "Timeline", "Session", "Start replay", "Settings"];
+      const missingNames = expectedNames.filter((name) => !result.commandNames.includes(name));
+      if (!app.accessibilitySupportEnabled || missingNames.length > 0 || result.dialogCount < 2 || result.sessionRole !== "BUTTON") {
+        throw new Error(`Accessibility smoke failed: ${JSON.stringify({ accessibilitySupportEnabled: app.accessibilitySupportEnabled, missingNames, result })}`);
+      }
+      if (result.activeFrame !== "02" || result.inspectorFrame !== "Frame 000002" || repaintRequestCount < 1) {
+        throw new Error(`Session repaint smoke failed: ${JSON.stringify({ repaintRequestCount, result })}`);
+      }
+      app.exit(0);
+    } catch (error) {
+      console.error(error.message || error);
+      app.exit(1);
+    }
   }
 });
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  app.setAccessibilitySupportEnabled(true);
+  createWindow();
+});
 app.on("before-quit", () => {
   isQuitting = true;
   clearTimeout(captureChangeTimer);
